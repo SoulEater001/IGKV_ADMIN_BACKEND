@@ -1,0 +1,113 @@
+# ==========================
+# Dependencies
+# ==========================
+node_modules/
+
+# ==========================
+# Environment Variables
+# ==========================
+.env
+.env.*
+!.env.example
+
+# ==========================
+# Logs
+# ==========================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================
+# Runtime Data
+# ==========================
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ==========================
+# Coverage
+# ==========================
+coverage/
+.nyc_output/
+
+# ==========================
+# Build Output
+# ==========================
+dist/
+build/
+out/
+
+# ==========================
+# Cache
+# ==========================
+.cache/
+.eslintcache
+.parcel-cache/
+
+# ==========================
+# Temporary Files
+# ==========================
+tmp/
+temp/
+*.tmp
+
+# ==========================
+# OS Files
+# ==========================
+.DS_Store
+Thumbs.db
+
+# ==========================
+# IDEs & Editors
+# ==========================
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# ==========================
+# Package Managers
+# ==========================
+.pnpm-store/
+.npm/
+
+# Yarn
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+
+# ==========================
+# Test Output
+# ==========================
+test-results/
+playwright-report/
+
+# ==========================
+# Uploads (if generated at runtime)
+# ==========================
+uploads/
+public/uploads/
+
+# ==========================
+# Database Files
+# ==========================
+*.sqlite
+*.sqlite3
+*.db
+
+# ==========================
+# Docker
+# ==========================
+.docker/
+
+# ==========================
+# Misc
+# ==========================
+*.tgz
