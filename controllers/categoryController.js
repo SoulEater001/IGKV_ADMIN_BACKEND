@@ -161,7 +161,7 @@ export const deleteCategory = async (req, res) => {
             });
         }
 
-        const [[usage]] = await pool.query(
+        const [[advisoryUsage]] = await pool.query(
             `
             SELECT COUNT(*) AS total
             FROM imd_advisory_detail
@@ -170,10 +170,26 @@ export const deleteCategory = async (req, res) => {
             [id]
         );
 
-        if (usage.total > 0) {
+        if (advisoryUsage.total > 0) {
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete category because it is used by existing advisories."
+            });
+        }
+
+        const [[cropUsage]] = await pool.query(
+            `
+            SELECT COUNT(*) AS total
+            FROM imd_m_crop
+            WHERE imd_category_id = ?
+            `,
+            [id]
+        );
+
+        if (cropUsage.total > 0) {
+            return res.status(409).json({
+                success: false,
+                message: "Cannot delete category because it is assigned to existing crops."
             });
         }
 

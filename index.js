@@ -9,6 +9,7 @@ import districtRoutes from './routes/districtRoutes.js';
 import blockRoutes from './routes/blockRoutes.js';
 import advisoryRoutes from './routes/advisoryRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
+import cropRoutes from './routes/cropRoutes.js';
 
 const PORT = process.env.PORT;
 const app = express();
@@ -28,6 +29,7 @@ app.use("/api/districts", districtRoutes);
 app.use("/api/blocks", blockRoutes);
 app.use("/api/advisories", advisoryRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/crops", cropRoutes);
 
 
 app.listen(PORT, () => {
