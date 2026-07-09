@@ -4,6 +4,11 @@ import cors from 'cors';
 import { pool } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import zoneRoutes from './routes/zoneRoutes.js';
+import stateRoutes from './routes/stateRoutes.js';
+import districtRoutes from './routes/districtRoutes.js';
+import blockRoutes from './routes/blockRoutes.js';
+import advisoryRoutes from './routes/advisoryRoutes.js';
+import categoryRoutes from './routes/categoryRoutes.js';
 
 const PORT = process.env.PORT;
 const app = express();
@@ -17,6 +22,12 @@ app.get('/', (req, res) => {
 
 app.use("/api", authRoutes);
 app.use("/api/zones", zoneRoutes);
+app.use("/api/state", zoneRoutes);
+app.use("/api/states", stateRoutes);
+app.use("/api/districts", districtRoutes);
+app.use("/api/blocks", blockRoutes);
+app.use("/api/advisories", advisoryRoutes);
+app.use("/api/categories", categoryRoutes);
 
 
 app.listen(PORT, () => {

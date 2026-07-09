@@ -15,6 +15,7 @@ export const getZones = async (req, res) => {
 
         res.json({
             success: true,
+            count: rows.length,
             data: rows,
         });
     } catch (error) {
