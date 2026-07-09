@@ -2,27 +2,58 @@ import { pool } from "../config/db.js";
 
 export const getCrops = async (req, res) => {
     try {
+        const { page, limit = 20 } = req.query;
 
-        const [rows] = await pool.query(`
-            SELECT
-                id,
-                imd_crop_id,
-                imd_crop_name,
-                imd_crop_name_h,
-                imd_category_id
+        const pageNumber = Number(page);
+        const pageSize = Number(limit);
+        const offset = (pageNumber - 1) * pageSize;
+
+        const [[countResult]] = await pool.query(
+            `
+            SELECT COUNT(*) AS total
             FROM imd_m_crop
-            ORDER BY imd_crop_name ASC
-        `);
+            `
+        );
+
+        // Fetch paginated crops
+        const [rows] = await pool.query(
+            `
+            SELECT
+                c.id,
+                c.imd_crop_id,
+                c.imd_crop_name,
+                c.imd_crop_name_h,
+                c.imd_category_id,
+                mc.img_category_name AS category_name
+
+            FROM imd_m_crop c
+
+            LEFT JOIN imd_m_category mc
+                ON c.imd_category_id = mc.imd_category_id
+
+            ORDER BY c.id ASC
+
+            LIMIT ?
+            OFFSET ?
+            `,
+            [
+                pageSize,
+                offset
+            ]
+        );
 
         return res.json({
             success: true,
+            page: pageNumber,
+            limit: pageSize,
+            total: countResult.total,
+            totalPages: Math.ceil(countResult.total / pageSize),
             data: rows,
-            count: rows.length
         });
 
     } catch (error) {
 
-        console.error(error);
+         console.error("Error fetching crops:", error);
 
         return res.status(500).json({
             success: false,
