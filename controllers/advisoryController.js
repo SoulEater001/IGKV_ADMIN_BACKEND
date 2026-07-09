@@ -106,11 +106,12 @@ export const getAdvisoryTypes = async (req, res) => {
     try {
         const [rows] = await pool.query(`
             SELECT
+                id,
                 imd_advisory_type_id,
                 imd_advisory_type_name,
                 imd_advisory_type_name_h
             FROM imd_advisory_type
-            ORDER BY imd_advisory_type_name ASC
+            ORDER BY id ASC
         `);
 
         res.json({

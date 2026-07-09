@@ -5,10 +5,11 @@ export const getCategories = async (req, res) => {
 
         const [rows] = await pool.query(`
             SELECT
+                id,
                 imd_category_id,
                 img_category_name
             FROM imd_m_category
-            ORDER BY img_category_name ASC
+            ORDER BY id;
         `);
 
         res.json({
