@@ -27,3 +27,177 @@ export const getCategories = async (req, res) => {
 
     }
 };
+
+export const createCategory = async (req, res) => {
+    try {
+        const { img_category_name } = req.body;
+
+        if (!img_category_name?.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Category name is required."
+            });
+        }
+
+        const [result] = await pool.query(
+            `
+            INSERT INTO imd_m_category
+            (
+                img_category_name
+            )
+            VALUES (?)
+            `,
+            [img_category_name.trim()]
+        );
+
+        const categoryId = result.insertId;
+
+        await pool.query(
+            `
+            UPDATE imd_m_category
+            SET imd_category_id = ?
+            WHERE id = ?
+            `,
+            [categoryId, categoryId]
+        );
+
+        return res.status(201).json({
+            success: true,
+            message: "Category created successfully.",
+            data: {
+                id: categoryId,
+                imd_category_id: categoryId
+            }
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to create category."
+        });
+
+    }
+};
+
+export const updateCategory = async (req, res) => {
+    try {
+
+        const { id } = req.params;
+        const { img_category_name } = req.body;
+
+        if (!img_category_name?.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Category name is required."
+            });
+        }
+
+        const [rows] = await pool.query(
+            `
+            SELECT id
+            FROM imd_m_category
+            WHERE id = ?
+            `,
+            [id]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Category not found."
+            });
+        }
+
+        await pool.query(
+            `
+            UPDATE imd_m_category
+            SET img_category_name = ?
+            WHERE id = ?
+            `,
+            [
+                img_category_name.trim(),
+                id
+            ]
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Category updated successfully."
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to update category."
+        });
+
+    }
+};
+
+export const deleteCategory = async (req, res) => {
+    try {
+
+        const { id } = req.params;
+
+        const [rows] = await pool.query(
+            `
+            SELECT id
+            FROM imd_m_category
+            WHERE id = ?
+            `,
+            [id]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Category not found."
+            });
+        }
+
+        const [[usage]] = await pool.query(
+            `
+            SELECT COUNT(*) AS total
+            FROM imd_advisory_detail
+            WHERE cat_id = ?
+            `,
+            [id]
+        );
+
+        if (usage.total > 0) {
+            return res.status(409).json({
+                success: false,
+                message: "Cannot delete category because it is used by existing advisories."
+            });
+        }
+
+        await pool.query(
+            `
+            DELETE FROM imd_m_category
+            WHERE id = ?
+            `,
+            [id]
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Category deleted successfully."
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to delete category."
+        });
+
+    }
+};
