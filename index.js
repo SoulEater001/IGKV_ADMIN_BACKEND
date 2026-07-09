@@ -12,6 +12,7 @@ import categoryRoutes from './routes/categoryRoutes.js';
 import cropRoutes from './routes/cropRoutes.js';
 import adminUsersRoutes from './routes/adminUsersRoutes.js';
 import rolesRoutes from './routes/rolesRoutes.js';
+import permissionRoutes from './routes/permissionRoutes.js';
 
 const PORT = process.env.PORT;
 const app = express();
@@ -34,6 +35,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/crops", cropRoutes);
 app.use("/api/users", adminUsersRoutes);
 app.use("/api/roles", rolesRoutes);
+app.use("/api/permissions", permissionRoutes);
 
 
 
