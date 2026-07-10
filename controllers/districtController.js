@@ -160,6 +160,36 @@ export const getDistricts = async (req, res) => {
     }
 };
 
+export const getDistrictOptions = async (req, res) => {
+    try {
+
+        const [rows] = await pool.query(`
+            SELECT
+                district_id,
+                name
+            FROM m_district
+            WHERE deleted IS NULL
+            ORDER BY name ASC
+        `);
+
+        return res.status(200).json({
+            success: true,
+            count: rows.length,
+            data: rows
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch districts."
+        });
+
+    }
+};
+
 export const getDistrictById = async (req, res) => {
     try {
 

@@ -8,7 +8,7 @@ export const getAdvisories = async (req, res) => {
             blockLgCode,
             languageId,
             page = 1,
-            limit = 20,
+            limit = 10,
         } = req.query;
 
         if (!stateLgCode || !districtLgCode || !blockLgCode || !languageId) {

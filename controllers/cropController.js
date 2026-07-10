@@ -2,7 +2,7 @@ import { pool } from "../config/db.js";
 
 export const getCrops = async (req, res) => {
     try {
-        const { page, limit = 20 } = req.query;
+        const { page, limit = 10 } = req.query;
 
         const pageNumber = Number(page);
         const pageSize = Number(limit);
