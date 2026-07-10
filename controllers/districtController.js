@@ -44,11 +44,16 @@ export const getDistrictsByZone = async (req, res) => {
 export const getDistricts = async (req, res) => {
     try {
 
-        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const {
+            page = 1,
+            limit = 20,
+        } = req.query;
 
-        const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+        const pageNumber = Number(page);
 
-        const offset = (page - 1) * limit;
+        const pageSize = Number(limit);
+
+        const offset = (pageNumber - 1) * pageSize;
 
         const search = req.query.search?.trim() || "";
 
@@ -60,10 +65,10 @@ export const getDistricts = async (req, res) => {
 
             where += `
                 AND (
-                    d.name LIKE ?
-                    OR s.name LIKE ?
-                    OR z.name LIKE ?
-                    OR d.district_lg_code LIKE ?
+                    LOWER(d.name) LIKE ?
+                    OR LOWER(s.name) LIKE ?
+                    OR LOWER(z.name) LIKE ?
+                    OR CAST(d.district_lg_code AS CHAR) LIKE ?
                 )
             `;
 
@@ -78,7 +83,7 @@ export const getDistricts = async (req, res) => {
 
         }
 
-        const [[{ total }]] = await pool.query(
+        const [[countResult]] = await pool.query(
             `
             SELECT COUNT(*) AS total
 
@@ -125,7 +130,7 @@ export const getDistricts = async (req, res) => {
             `,
             [
                 ...params,
-                limit,
+                pageSize,
                 offset
             ]
         );
@@ -133,21 +138,11 @@ export const getDistricts = async (req, res) => {
         return res.status(200).json({
 
             success: true,
-
             data: rows,
-
-            pagination: {
-
-                page,
-
-                limit,
-
-                total,
-
-                totalPages: Math.ceil(total / limit)
-
-            }
-
+            page: pageNumber,
+            limit: pageSize,
+            total:countResult.total,
+            totalPages: Math.ceil(countResult.total / pageSize)
         });
 
     } catch (error) {
