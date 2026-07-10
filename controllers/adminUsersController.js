@@ -14,7 +14,7 @@ export const getUsers = async (req, res) => {
                  u.updated_at,
 
                 r.id AS role_id,
-                r.name AS role_name
+                r.name AS role
            FROM admin_users u
 
             LEFT JOIN user_roles ur
