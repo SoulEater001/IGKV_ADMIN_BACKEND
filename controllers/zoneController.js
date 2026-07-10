@@ -63,73 +63,151 @@ export const getZoneById = async (req, res) => {
 
 export const createZone = async (req, res) => {
     try {
-        const { name, Image_Path } = req.body;
 
-        const [result] = await pool.query(
+        const {
+            name,
+            imagePath = null
+        } = req.body;
+
+        if (!name?.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Zone name is required."
+            });
+        }
+
+        const [[existing]] = await pool.query(
+            `
+            SELECT Zone_id
+            FROM m_zone
+            WHERE LOWER(name) = LOWER(?)
+              AND (deleted = 0 OR deleted IS NULL)
+            `,
+            [name.trim()]
+        );
+
+        if (existing) {
+            return res.status(409).json({
+                success: false,
+                message: "Zone already exists."
+            });
+        }
+
+        await pool.query(
             `
             INSERT INTO m_zone
             (
                 name,
-                Image_Path,
-                create_datetime
+                Image_Path
             )
-            VALUES
-            (
-                ?, ?, NOW()
-            )
+            VALUES (?, ?)
             `,
-            [name, Image_Path]
+            [
+                name.trim(),
+                imagePath
+            ]
         );
 
-        res.status(201).json({
+        return res.status(201).json({
             success: true,
-            message: "Zone created successfully.",
-            id: result.insertId,
+            message: "Zone created successfully."
         });
+
     } catch (error) {
+
         console.error(error);
-        res.status(500).json({
+
+        return res.status(500).json({
             success: false,
-            message: "Failed to create zone.",
+            message: "Failed to create zone."
         });
+
     }
 };
 
 export const updateZone = async (req, res) => {
     try {
-        const { id } = req.params;
-        const { name, Image_Path } = req.body;
 
-        const [result] = await pool.query(
+        const { id } = req.params;
+
+        const {
+            name,
+            imagePath = null
+        } = req.body;
+
+        if (!name?.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Zone name is required."
+            });
+        }
+
+        const [[zone]] = await pool.query(
+            `
+            SELECT Zone_id
+            FROM m_zone
+            WHERE Zone_id = ?
+            `,
+            [id]
+        );
+
+        if (!zone) {
+            return res.status(404).json({
+                success: false,
+                message: "Zone not found."
+            });
+        }
+
+        const [[existing]] = await pool.query(
+            `
+            SELECT Zone_id
+            FROM m_zone
+            WHERE LOWER(name) = LOWER(?)
+              AND Zone_id <> ?
+              AND (deleted = 0 OR deleted IS NULL)
+            `,
+            [
+                name.trim(),
+                id
+            ]
+        );
+
+        if (existing) {
+            return res.status(409).json({
+                success: false,
+                message: "Zone already exists."
+            });
+        }
+
+        await pool.query(
             `
             UPDATE m_zone
             SET
                 name = ?,
-                Image_Path = ?,
-                modify_Datetime = NOW()
+                Image_Path = ?
             WHERE Zone_id = ?
-            AND deleted IS NULL
             `,
-            [name, Image_Path, id]
+            [
+                name.trim(),
+                imagePath,
+                id
+            ]
         );
 
-        if (!result.affectedRows) {
-            return res.status(404).json({
-                success: false,
-                message: "Zone not found.",
-            });
-        }
-
-        res.json({
+        return res.status(200).json({
             success: true,
-            message: "Zone updated successfully.",
+            message: "Zone updated successfully."
         });
+
     } catch (error) {
+
         console.error(error);
-        res.status(500).json({
+
+        return res.status(500).json({
             success: false,
-            message: "Failed to update zone.",
+            message: "Failed to update zone."
         });
+
     }
 };
 

@@ -9,7 +9,7 @@ router.get("/", zoneController.getZones);
 router.get("/:id", zoneController.getZoneById);
 
 router.post(
-    "/",
+    "/create",
     // upload.single("image"),
     zoneController.createZone
 );
