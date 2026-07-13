@@ -70,10 +70,12 @@ export const getApprovalRequests = async (req, res) => {
 
 
 export const approveRequest = async (req, res) => {
+    const { remarks } = req.body;
 
     const connection = await pool.getConnection();
     let request;
     try {
+        console.log(req.body);
 
         await connection.beginTransaction();
 
@@ -146,12 +148,14 @@ export const approveRequest = async (req, res) => {
                 status = ?,
                 approved_by = ?,
                 approved_at = NOW(),
+                remarks = ?,
                 record_id = ?
             WHERE id = ?
             `,
             [
                 APPROVAL_STATUS.APPROVED,
                 req.user.id,
+                remarks ?? null,
                 entityId,
                 request.id,
             ]
@@ -161,7 +165,7 @@ export const approveRequest = async (req, res) => {
 
         await logActivity({
             userId: req.user.id,
-            action: ACTIONS.REJECT,
+            action: ACTIONS.APPROVE,
             entity: request.resource,
             entityId: entityId ?? request.record_id,
             description: `${req.user.name} approved ${request.resource} ${request.action}`,
@@ -194,6 +198,7 @@ export const approveRequest = async (req, res) => {
                     APPROVAL_STATUS.REJECTED,
                     req.user.id,
                     error.message,
+                    remarks,
                     request.id
                 ]
             );
@@ -214,16 +219,20 @@ export const approveRequest = async (req, res) => {
 };
 
 export const rejectRequest = async (req, res) => {
-
+    const connection = await pool.getConnection();
     try {
 
-        const [result] = await pool.query(
+        const { remarks } = req.body;
+        await connection.beginTransaction();
+
+        const [result] = await connection.query(
             `
             UPDATE approval_requests
             SET
                 status = ?,
                 approved_by = ?,
-                approved_at = NOW()
+                approved_at = NOW(),
+                remarks = ?
             WHERE
                 id = ?
                 AND status = ?
@@ -231,8 +240,9 @@ export const rejectRequest = async (req, res) => {
             [
                 APPROVAL_STATUS.REJECTED,
                 req.user.id,
+                remarks,
                 req.params.id,
-                APPROVAL_STATUS.PENDING
+                APPROVAL_STATUS.PENDING,
             ]
         );
 
@@ -243,6 +253,8 @@ export const rejectRequest = async (req, res) => {
             });
         }
 
+        await connection.commit();
+
         return res.status(200).json({
             success: true,
             message: "Request rejected successfully."
@@ -251,12 +263,14 @@ export const rejectRequest = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-
+        await connection.commit();
         return res.status(500).json({
             success: false,
             message: "Failed to reject request."
         });
 
+    } finally {
+        connection.release();
     }
 
 };

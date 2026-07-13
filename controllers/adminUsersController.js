@@ -163,7 +163,7 @@ export const createUser = async (req, res) => {
                 userId: req.user.id,
                 action: ACTIONS.CREATE,
                 entity: ENTITIES.USER,
-                entityId: user.id,
+                entityId: req.user.id,
                 description: `${req.user.name} requested creation of user ${name}`,
                 ipAddress: req.ip
             });
