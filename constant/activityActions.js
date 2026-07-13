@@ -4,4 +4,6 @@ export const ACTIONS = Object.freeze({
     DELETE: "DELETE",
     LOGIN: "LOGIN",
     LOGOUT: "LOGOUT",
+    APPROVE:"APPROVE",
+    REJECT:"REJECT"
 });

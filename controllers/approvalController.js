@@ -1,5 +1,5 @@
 import { pool } from "../config/db.js";
-import { executeCreateUser } from "../services/adminUserService.js";
+import { executeCreateUser, executeDeleteUser } from "../services/adminUserService.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { ACTIONS } from "../constant/activityActions.js";
 import { APPROVAL_STATUS, ROLES } from "../constant/index.js";
@@ -124,6 +124,15 @@ export const approveRequest = async (req, res) => {
 
                 break;
 
+            case `${ENTITIES.USER}:${ACTIONS.DELETE}`:
+
+                entityId = await executeDeleteUser(
+                    connection,
+                    payload.id
+                );
+
+                break;
+
             default:
 
                 throw new Error("Unsupported resource.");
@@ -152,7 +161,7 @@ export const approveRequest = async (req, res) => {
 
         await logActivity({
             userId: req.user.id,
-            action: APPROVAL_STATUS.APPROVED,
+            action: ACTIONS.REJECT,
             entity: request.resource,
             entityId: entityId ?? request.record_id,
             description: `${req.user.name} approved ${request.resource} ${request.action}`,
@@ -212,7 +221,7 @@ export const rejectRequest = async (req, res) => {
             `
             UPDATE approval_requests
             SET
-                status = 'rejected',
+                status = ?,
                 approved_by = ?,
                 approved_at = NOW()
             WHERE
@@ -220,6 +229,7 @@ export const rejectRequest = async (req, res) => {
                 AND status = ?
             `,
             [
+                APPROVAL_STATUS.REJECTED,
                 req.user.id,
                 req.params.id,
                 APPROVAL_STATUS.PENDING

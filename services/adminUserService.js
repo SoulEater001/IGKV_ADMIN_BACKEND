@@ -51,3 +51,21 @@ export const executeCreateUser = async (connection, data) => {
     return result.insertId;
 
 };
+
+export const executeDeleteUser = async (connection, userId) => {
+
+    const [result] = await connection.query(
+        `
+        DELETE FROM admin_users
+        WHERE id = ?
+        `,
+        [userId]
+    );
+
+    if (!result.affectedRows) {
+        throw new Error("User not found.");
+    }
+
+    return userId;
+
+};

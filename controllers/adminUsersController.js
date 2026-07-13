@@ -4,7 +4,7 @@ import { logActivity } from "../utils/activityLogger.js";
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
-import { executeCreateUser } from "../services/adminUserService.js";
+import { executeCreateUser, executeDeleteUser } from "../services/adminUserService.js";
 import { ROLES } from "../constant/index.js";
 
 export const getUsers = async (req, res) => {
@@ -79,7 +79,7 @@ export const createUser = async (req, res) => {
 
         const [[existing]] = await connection.query(
             `
-            SELECT id
+            SELECT id, name
             FROM admin_users
             WHERE email = ?
             `,
@@ -95,7 +95,7 @@ export const createUser = async (req, res) => {
 
         const [[role]] = await connection.query(
             `
-            SELECT id
+            SELECT id, name
             FROM roles
             WHERE id = ?
             `,
@@ -107,6 +107,18 @@ export const createUser = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "Role not found."
+            });
+        }
+
+        if (
+            req.user.role === ROLES.ADMIN &&
+            role.name === ROLES.SUPER_ADMIN
+        ) {
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: "You are not allowed to create a Super Admin."
             });
         }
 
@@ -146,6 +158,15 @@ export const createUser = async (req, res) => {
             });
 
             await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.USER,
+                entityId: user.id,
+                description: `${req.user.name} requested creation of user ${name}`,
+                ipAddress: req.ip
+            });
 
             return res.status(200).json({
                 success: true,
@@ -356,70 +377,136 @@ export const updateUser = async (req, res) => {
 };
 
 export const deleteUser = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
 
         const { id } = req.params;
-
-        const [[user]] = await pool.query(
+        await connection.beginTransaction();
+        const [[user]] = await connection.query(
             `
-            SELECT id, name
-            FROM admin_users
-            WHERE id = ?
+            SELECT
+                u.id,
+                u.name,
+                u.email,
+                r.name AS role
+            FROM admin_users u
+            LEFT JOIN user_roles ur
+                ON u.id = ur.user_id
+            LEFT JOIN roles r
+                ON ur.role_id = r.id
+            WHERE u.id = ?
             `,
             [id]
         );
 
         if (!user) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "User not found."
             });
         }
 
-        if (req.user.id == id) {
+        if (
+            req.user.role === ROLES.ADMIN &&
+            user.role === ROLES.SUPER_ADMIN
+        ) {
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: "You cannot delete a Super Admin."
+            });
+        }
+
+        if (req.user.id == Number(id)) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "You cannot delete your own account."
             });
         }
+        const payload = {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role
+        };
 
-        const [result] = await pool.query(
-            `
-            DELETE FROM admin_users
-            WHERE id = ?
-            `,
-            [id]
-        );
+        if (req.user.role === ROLES.ADMIN) {
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found."
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.USER,
+                ACTIONS.DELETE,
+                "id",
+                user.id
+            );
+
+            if (pending) {
+                await connection.rollback();
+                return res.status(409).json({
+                    success: false,
+                    message: "A delete request for this user is already pending."
+                });
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.USER,
+                action: ACTIONS.DELETE,
+                recordId: user.id,
+                payload,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.USER,
+                entityId: user.id,
+                description: `${req.user.name} requested deletion of user ${user.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "User deletion request sent for approval."
+            });
+
+        } else {
+            const deletedUserId = await executeDeleteUser(
+                connection,
+                user.id
+            );
+            await connection.commit();
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.USER,
+                entityId: deletedUserId,
+                description: `${req.user.name} deleted user ${user.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "User deleted successfully."
             });
         }
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.DELETE,
-            entity: ENTITIES.USER,
-            entityId: id,
-            description: `${req.user.name} deleted user ${user.name}`,
-            ipAddress: req.ip
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "User deleted successfully."
-        });
 
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to delete user."
         });
 
+    } finally {
+        connection.release();
     }
 };
