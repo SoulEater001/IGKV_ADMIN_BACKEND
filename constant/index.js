@@ -18,3 +18,14 @@ export const PERMISSION_RESOURCES = [
     "district",
     "block",
 ];
+
+export const ROLES = {
+    ADMIN : "ADMIN",
+    SUPER_ADMIN : "SUPER_ADMIN"
+}
+
+export const APPROVAL_STATUS = {
+    APPROVED: "APPROVED",
+    REJECTED:"REJECTED",
+    PENDING:"PENDING"
+}

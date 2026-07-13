@@ -3,5 +3,5 @@ export const ACTIONS = Object.freeze({
     UPDATE: "UPDATE",
     DELETE: "DELETE",
     LOGIN: "LOGIN",
-    LOGOUT: "LOGOUT"
+    LOGOUT: "LOGOUT",
 });

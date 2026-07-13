@@ -3,6 +3,9 @@ import bcrypt from 'bcrypt'
 import { logActivity } from "../utils/activityLogger.js";
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
+import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
+import { executeCreateUser } from "../services/adminUserService.js";
+import { ROLES } from "../constant/index.js";
 
 export const getUsers = async (req, res) => {
     try {
@@ -100,6 +103,7 @@ export const createUser = async (req, res) => {
         );
 
         if (!role) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Role not found."
@@ -108,55 +112,67 @@ export const createUser = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const [result] = await connection.query(
-            `
-            INSERT INTO admin_users
-            (
-                name,
-                email,
-                password,
-                is_active
-            )
-            VALUES (?, ?, ?, ?)
-            `,
-            [
-                name.trim(),
-                email.trim(),
-                hashedPassword,
-                is_active ? 1 : 0
-            ]
-        );
+        const userData = {
+            name: name.trim(),
+            email: email.trim(),
+            password: hashedPassword,
+            role_id,
+            is_active
+        };
 
-        await connection.query(
-            `
-            INSERT INTO user_roles
-            (
-                user_id,
-                role_id
-            )
-            VALUES (?, ?)
-            `,
-            [
-                result.insertId,
-                role_id
-            ]
-        );
+        if (req.user.role === ROLES.ADMIN) {
 
-        await connection.commit();
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.USER,
+                ACTIONS.CREATE,
+                "email",
+                email.trim()
+            );
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.CREATE,
-            entity: ENTITIES.USER,
-            entityId: result.insertId,
-            description: `${req.user.name} created user ${name.trim()}`,
-            ipAddress: req.ip
-        });
+            if (pending) {
+                await connection.rollback();
+                return res.status(409).json({
+                    success: false,
+                    message: "A user creation request with this email is already pending."
+                });
+            }
 
-        return res.status(201).json({
-            success: true,
-            message: "User created successfully."
-        });
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.USER,
+                action: ACTIONS.CREATE,
+                payload: userData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "User creation request sent for approval."
+            });
+
+        } else {
+
+            const userId = await executeCreateUser(connection, userData);
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.USER,
+                entityId: userId,
+                description: `${req.user.name} created user ${name.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(201).json({
+                success: true,
+                message: "User created successfully."
+            });
+        }
 
     } catch (error) {
 
