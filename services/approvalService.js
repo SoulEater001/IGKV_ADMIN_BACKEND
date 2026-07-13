@@ -40,29 +40,37 @@ export const hasPendingApproval = async (
     connection,
     resource,
     action,
-    jsonPath,
-    value
+    filters = {}
 ) => {
 
-    const [[row]] = await connection.query(
-        `
+    let sql = `
         SELECT id
         FROM approval_requests
         WHERE
             resource = ?
             AND action = ?
             AND status = ?
+    `;
+
+    const params = [
+        resource,
+        action,
+        APPROVAL_STATUS.PENDING
+    ];
+
+    for (const [key, value] of Object.entries(filters)) {
+
+        sql += `
             AND JSON_UNQUOTE(JSON_EXTRACT(payload, ?)) = ?
-        LIMIT 1
-        `,
-        [
-            resource,
-            action,
-            APPROVAL_STATUS.PENDING,
-            `$.${jsonPath}`,
-            value
-        ]
-    );
+        `;
+
+        params.push(`$.${key}`, String(value));
+
+    }
+
+    sql += ` LIMIT 1`;
+
+    const [[row]] = await connection.query(sql, params);
 
     return !!row;
 };

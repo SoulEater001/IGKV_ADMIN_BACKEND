@@ -95,8 +95,9 @@ export const createRole = async (req, res) => {
                 connection,
                 ENTITIES.ROLE,
                 ACTIONS.CREATE,
-                "name",
-                roleData.name
+                {
+                   name: roleData.name
+                }
             );
 
             if (pending) {
@@ -311,8 +312,9 @@ export const deleteRole = async (req, res) => {
                 connection,
                 ENTITIES.ROLE,
                 ACTIONS.DELETE,
-                "id",
-                role.id
+                {
+                    id: role.id
+                }
             );
 
             if (pending) {

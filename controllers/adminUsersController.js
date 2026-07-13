@@ -138,8 +138,9 @@ export const createUser = async (req, res) => {
                 connection,
                 ENTITIES.USER,
                 ACTIONS.CREATE,
-                "email",
-                email.trim()
+                {
+                    email: email.trim()
+                }
             );
 
             if (pending) {
@@ -439,8 +440,9 @@ export const deleteUser = async (req, res) => {
                 connection,
                 ENTITIES.USER,
                 ACTIONS.DELETE,
-                "id",
-                user.id
+                {
+                    id:user.id
+                }
             );
 
             if (pending) {
