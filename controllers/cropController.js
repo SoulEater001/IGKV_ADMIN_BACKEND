@@ -1,4 +1,7 @@
 import { pool } from "../config/db.js";
+import { logActivity } from '../utils/activityLogger.js'
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
 
 export const getCrops = async (req, res) => {
     try {
@@ -53,7 +56,7 @@ export const getCrops = async (req, res) => {
 
     } catch (error) {
 
-         console.error("Error fetching crops:", error);
+        console.error("Error fetching crops:", error);
 
         return res.status(500).json({
             success: false,
@@ -107,6 +110,15 @@ export const createCrop = async (req, res) => {
             [cropId, cropId]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.CROP,
+            entityId: cropId,
+            description: `${req.user.name} created crop ${imd_crop_name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(201).json({
             success: true,
             message: "Crop created successfully.",
@@ -148,7 +160,7 @@ export const updateCrop = async (req, res) => {
 
         const [rows] = await pool.query(
             `
-            SELECT id
+            SELECT id, imd_crop_name
             FROM imd_m_crop
             WHERE id = ?
             `,
@@ -179,6 +191,15 @@ export const updateCrop = async (req, res) => {
             ]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.CROP,
+            entityId: id,
+            description: `${req.user.name} updated crop ${imd_crop_name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "Crop updated successfully."
@@ -201,23 +222,25 @@ export const deleteCrop = async (req, res) => {
 
         const { id } = req.params;
 
-        const [rows] = await pool.query(
+        const [[crop]] = await pool.query(
             `
-            SELECT id
-            FROM imd_m_crop
-            WHERE id = ?
+                SELECT
+                    id,
+                    imd_crop_name
+                FROM imd_m_crop
+                WHERE id = ?
             `,
             [id]
         );
 
-        if (rows.length === 0) {
+        if (!crop) {
             return res.status(404).json({
                 success: false,
                 message: "Crop not found."
             });
         }
 
-        {/*const [[usage]] = await pool.query(
+        /*const [[usage]] = await pool.query(
             `
                 SELECT COUNT(*) AS total
                 FROM some_table
@@ -231,7 +254,7 @@ export const deleteCrop = async (req, res) => {
                 success: false,
                 message: "Cannot delete crop because it is used by existing records."
             });
-        }*/}
+        }*/
 
         await pool.query(
             `
@@ -240,6 +263,15 @@ export const deleteCrop = async (req, res) => {
             `,
             [id]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.CROP,
+            entityId: id,
+            description: `${req.user.name} deleted crop ${crop.imd_crop_name}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,

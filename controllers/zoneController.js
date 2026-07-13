@@ -1,4 +1,7 @@
 import { pool } from "../config/db.js";
+import { logActivity } from '../utils/activityLogger.js'
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
 
 export const getZones = async (req, res) => {
     try {
@@ -93,7 +96,7 @@ export const createZone = async (req, res) => {
             });
         }
 
-        await pool.query(
+        const [result] = await pool.query(
             `
             INSERT INTO m_zone
             (
@@ -107,6 +110,15 @@ export const createZone = async (req, res) => {
                 imagePath
             ]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.ZONE,
+            entityId: result.insertId,
+            description: `${req.user.name} created zone ${name.trim()}`,
+            ipAddress: req.ip
+        });
 
         return res.status(201).json({
             success: true,
@@ -144,7 +156,7 @@ export const updateZone = async (req, res) => {
 
         const [[zone]] = await pool.query(
             `
-            SELECT Zone_id
+            SELECT Zone_id, name
             FROM m_zone
             WHERE Zone_id = ?
             `,
@@ -194,6 +206,15 @@ export const updateZone = async (req, res) => {
             ]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.ZONE,
+            entityId: id,
+            description: `${req.user.name} updated zone ${name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "Zone updated successfully."
@@ -214,6 +235,24 @@ export const updateZone = async (req, res) => {
 export const deleteZone = async (req, res) => {
     try {
         const { id } = req.params;
+
+        const [[zone]] = await pool.query(
+            `
+            SELECT
+                Zone_id,
+                name
+            FROM m_zone
+            WHERE Zone_id = ?
+            `,
+            [id]
+        );
+
+        if (!zone) {
+            return res.status(404).json({
+                success: false,
+                message: "Zone not found."
+            });
+        }
 
         // Check if zone has districts
         const [districts] = await pool.query(
@@ -251,6 +290,15 @@ export const deleteZone = async (req, res) => {
                 message: "Zone not found.",
             });
         }
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.ZONE,
+            entityId: id,
+            description: `${req.user.name} deleted zone ${zone.name}`,
+            ipAddress: req.ip
+        });
 
         res.json({
             success: true,

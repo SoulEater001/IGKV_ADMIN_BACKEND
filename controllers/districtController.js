@@ -1,4 +1,7 @@
 import { pool } from "../config/db.js";
+import { logActivity } from '../utils/activityLogger.js'
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
 
 export const getDistrictsByZone = async (req, res) => {
     try {
@@ -141,7 +144,7 @@ export const getDistricts = async (req, res) => {
             data: rows,
             page: pageNumber,
             limit: pageSize,
-            total:countResult.total,
+            total: countResult.total,
             totalPages: Math.ceil(countResult.total / pageSize)
         });
 
@@ -276,7 +279,7 @@ export const createDistrict = async (req, res) => {
             });
         }
 
-        await pool.query(
+        const [result] = await pool.query(
             `
             INSERT INTO m_district
             (
@@ -294,6 +297,15 @@ export const createDistrict = async (req, res) => {
                 district_lg_code
             ]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.DISTRICT,
+            entityId: result.insertId,
+            description: `${req.user.name} created district ${name.trim()}`,
+            ipAddress: req.ip
+        });
 
         return res.status(201).json({
             success: true,
@@ -433,6 +445,20 @@ export const updateDistrict = async (req, res) => {
 
         await connection.commit();
 
+        const description =
+            oldLgCode === district_lg_code
+                ? `${req.user.name} updated district ${name.trim()}`
+                : `${req.user.name} updated district ${name.trim()} and changed its LG code`;
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.DISTRICT,
+            entityId: id,
+            description,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "District updated successfully."
@@ -466,7 +492,8 @@ export const deleteDistrict = async (req, res) => {
             `
             SELECT
                 district_id,
-                district_lg_code
+                district_lg_code,
+                name
 
             FROM m_district
 
@@ -549,6 +576,15 @@ export const deleteDistrict = async (req, res) => {
             `,
             [id]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.DISTRICT,
+            entityId: id,
+            description: `${req.user.name} deleted district ${district.name}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,

@@ -1,4 +1,7 @@
 import { pool } from "../config/db.js"
+import { logActivity } from '../utils/activityLogger.js'
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
 
 export const getStates = async (req, res) => {
     try {
@@ -109,7 +112,7 @@ export const createState = async (req, res) => {
             });
         }
 
-        await pool.query(
+        const [result] = await pool.query(
             `
             INSERT INTO m_state
             (
@@ -123,6 +126,15 @@ export const createState = async (req, res) => {
                 state_lg_code
             ]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.STATE,
+            entityId: result.insertId,
+            description: `${req.user.name} created state ${name.trim()}`,
+            ipAddress: req.ip
+        });
 
         return res.status(201).json({
             success: true,
@@ -169,6 +181,7 @@ export const updateState = async (req, res) => {
         const [[state]] = await connection.query(
             `
             SELECT
+                name,
                 state_id,
                 state_lg_code
             FROM m_state
@@ -265,6 +278,20 @@ export const updateState = async (req, res) => {
 
         await connection.commit();
 
+        const description =
+            oldLgCode === state_lg_code
+                ? `${req.user.name} updated state ${name.trim()}`
+                : `${req.user.name} updated state ${name.trim()} and changed its LG code`;
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.STATE,
+            entityId: id,
+            description,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "State updated successfully."
@@ -296,6 +323,7 @@ export const deleteState = async (req, res) => {
         const [[state]] = await pool.query(
             `
             SELECT
+                name,
                 state_id,
                 state_lg_code
             FROM m_state
@@ -372,6 +400,15 @@ export const deleteState = async (req, res) => {
             `,
             [id]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.STATE,
+            entityId: id,
+            description: `${req.user.name} deleted state ${state.name}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,

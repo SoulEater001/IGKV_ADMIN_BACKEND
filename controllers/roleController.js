@@ -1,4 +1,7 @@
 import { pool } from "../config/db.js";
+import { logActivity } from '../utils/activityLogger.js'
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
 
 export const getRoles = async (req, res) => {
     try {
@@ -76,6 +79,15 @@ export const createRole = async (req, res) => {
             ]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.ROLE,
+            entityId: result.insertId,
+            description: `${req.user.name} created role ${name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(201).json({
             success: true,
             message: "Role created successfully.",
@@ -115,7 +127,7 @@ export const updateRole = async (req, res) => {
 
         const [[role]] = await pool.query(
             `
-            SELECT id
+            SELECT id, name
             FROM roles
             WHERE id = ?
             `,
@@ -164,6 +176,15 @@ export const updateRole = async (req, res) => {
             ]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.ROLE,
+            entityId: id,
+            description: `${req.user.name} updated role ${name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "Role updated successfully."
@@ -188,7 +209,7 @@ export const deleteRole = async (req, res) => {
 
         const [[role]] = await pool.query(
             `
-            SELECT id
+            SELECT id, name
             FROM roles
             WHERE id = ?
             `,
@@ -225,6 +246,15 @@ export const deleteRole = async (req, res) => {
             `,
             [id]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.ROLE,
+            entityId: id,
+            description: `${req.user.name} deleted role ${role.name}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,
@@ -312,7 +342,7 @@ export const updateRolePermissions = async (req, res) => {
 
         const [[role]] = await connection.query(
             `
-            SELECT id
+            SELECT id, name
             FROM roles
             WHERE id = ?
             `,
@@ -383,6 +413,15 @@ export const updateRolePermissions = async (req, res) => {
         }
 
         await connection.commit();
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.ROLE,
+            entityId: id,
+            description: `${req.user.name} updated permissions for role ${role.name} (${permissionIds.length} permissions)`,
+            ipAddress: req.ip
+        });
 
         connection.release();
 

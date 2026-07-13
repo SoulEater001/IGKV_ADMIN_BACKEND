@@ -1,4 +1,7 @@
 import { pool } from "../config/db.js";
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
+import { logActivity } from '../utils/activityLogger.js'
 
 export const getAdvisories = async (req, res) => {
     try {
@@ -172,6 +175,15 @@ export const createAdvisoryType = async (req, res) => {
             [advisoryTypeId, advisoryTypeId]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.ADVISORY_TYPE,
+            entityId: advisoryTypeId,
+            description: `${req.user.name} created advisory type ${imd_advisory_type_name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(201).json({
             success: true,
             message: "Advisory type created successfully.",
@@ -231,6 +243,15 @@ export const updateAdvisoryType = async (req, res) => {
             });
         }
 
+        await logActivity({
+            userId: req.user.id,
+            action: ENTITIES.UPDATE,
+            entity: ENTITIES.ADVISORY_TYPE,
+            entityId: id,
+            description: `${req.user.name} updated advisory type ${imd_advisory_type_name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "Advisory type updated successfully."
@@ -255,7 +276,7 @@ export const deleteAdvisoryType = async (req, res) => {
         // Check if advisory type exists
         const [typeRows] = await pool.query(
             `
-            SELECT id
+            SELECT id, imd_advisory_type_name
             FROM imd_advisory_type
             WHERE id = ?
             `,
@@ -294,6 +315,15 @@ export const deleteAdvisoryType = async (req, res) => {
             `,
             [id]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.ADVISORY_TYPE,
+            entityId: id,
+            description: `${req.user.name} deleted advisory type ${typeRows[0].imd_advisory_type_name}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,
@@ -379,6 +409,15 @@ export const updateAdvisory = async (req, res) => {
             ]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.ADVISORY,
+            entityId: id,
+            description: `${req.user.name} updated an advisory`,
+            ipAddress: req.ip
+        });
+
         res.json({
             success: true,
             message: "Advisory updated successfully."
@@ -398,6 +437,7 @@ export const updateAdvisory = async (req, res) => {
 
 export const createAdvisory = async (req, res) => {
     try {
+        console.log(req.user);
         const {
             state_lg_code,
             district_lg_code,
@@ -469,7 +509,7 @@ export const createAdvisory = async (req, res) => {
             );
         }
 
-        await pool.query(
+        const [detailResult] = await pool.query(
             `
       INSERT INTO imd_advisory_detail
       (
@@ -499,6 +539,15 @@ export const createAdvisory = async (req, res) => {
             ]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.ADVISORY,
+            entityId: detailResult.insertId,
+            description: `${req.user.name} created an advisory`,
+            ipAddress: req.ip
+        });
+
         res.status(201).json({
             success: true,
             message: "Advisory created successfully."
@@ -511,5 +560,86 @@ export const createAdvisory = async (req, res) => {
             success: false,
             message: "Failed to create advisory."
         });
+    }
+};
+
+export const deleteAdvisory = async (req, res) => {
+    try {
+
+        const { id } = req.params;
+
+        const [rows] = await pool.query(
+            `
+            SELECT
+                id,
+                advisory_main_id
+            FROM imd_advisory_detail
+            WHERE id = ?
+            `,
+            [id]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Advisory not found."
+            });
+        }
+
+        const advisory = rows[0];
+
+        await pool.query(
+            `
+            DELETE FROM imd_advisory_detail
+            WHERE id = ?
+            `,
+            [id]
+        );
+
+        // Remove advisory_main if no details remain
+        const [[remaining]] = await pool.query(
+            `
+            SELECT COUNT(*) AS total
+            FROM imd_advisory_detail
+            WHERE advisory_main_id = ?
+            `,
+            [advisory.advisory_main_id]
+        );
+
+        if (remaining.total === 0) {
+
+            await pool.query(
+                `
+                DELETE FROM imd_advisory_main
+                WHERE id = ?
+                `,
+                [advisory.advisory_main_id]
+            );
+
+        }
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.ADVISORY,
+            entityId: id,
+            description: `${req.user.name} deleted an advisory`,
+            ipAddress: req.ip
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Advisory deleted successfully."
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to delete advisory."
+        });
+
     }
 };

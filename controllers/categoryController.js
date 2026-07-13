@@ -1,4 +1,7 @@
 import { pool } from "../config/db.js";
+import { logActivity } from '../utils/activityLogger.js'
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
 
 export const getCategories = async (req, res) => {
     try {
@@ -62,6 +65,15 @@ export const createCategory = async (req, res) => {
             [categoryId, categoryId]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.CATEGORY,
+            entityId: categoryId,
+            description: `${req.user.name} created category ${img_category_name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(201).json({
             success: true,
             message: "Category created successfully.",
@@ -98,7 +110,7 @@ export const updateCategory = async (req, res) => {
 
         const [rows] = await pool.query(
             `
-            SELECT id
+            SELECT id, img_category_name
             FROM imd_m_category
             WHERE id = ?
             `,
@@ -123,6 +135,14 @@ export const updateCategory = async (req, res) => {
                 id
             ]
         );
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.CATEGORY,
+            entityId: id,
+            description: `${req.user.name} updated category ${img_category_name.trim()}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,
@@ -146,16 +166,18 @@ export const deleteCategory = async (req, res) => {
 
         const { id } = req.params;
 
-        const [rows] = await pool.query(
+        const [[category]] = await pool.query(
             `
-            SELECT id
+            SELECT
+                id,
+                img_category_name
             FROM imd_m_category
             WHERE id = ?
             `,
             [id]
         );
 
-        if (rows.length === 0) {
+        if (!category) {
             return res.status(404).json({
                 success: false,
                 message: "Category not found."
@@ -201,6 +223,15 @@ export const deleteCategory = async (req, res) => {
             `,
             [id]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.CATEGORY,
+            entityId: id,
+            description: `${req.user.name} deleted category ${category.img_category_name}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,

@@ -1,0 +1,16 @@
+export const ENTITIES = Object.freeze({
+    USER: "ADMIN_USER",
+    ROLE: "ROLE",
+    PERMISSION: "PERMISSION",
+
+    ZONE: "ZONE",
+    STATE: "STATE",
+    DISTRICT: "DISTRICT",
+    BLOCK: "BLOCK",
+
+    CROP: "CROP",
+    CATEGORY: "CATEGORY",
+
+    ADVISORY: "ADVISORY",
+    ADVISORY_TYPE: "ADVISORY_TYPE"
+});

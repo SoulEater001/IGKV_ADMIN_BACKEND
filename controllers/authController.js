@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { pool } from "../config/db.js";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
+import { logActivity } from "../utils/activityLogger.js";
 
 export const signup = async (req, res) => {
     try {
@@ -123,6 +124,16 @@ export const login = async (req, res) => {
             email: user.email,
             role,
         };
+
+        await logActivity({
+            userId: user.id,
+            action: "LOGIN",
+            entity: "Admin_User",
+            entityId: user.id,
+            description: `${user.name} logged in`,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "Login successful.",
@@ -162,6 +173,15 @@ export const me = async (req, res) => {
 };
 
 export const logout = async (req, res) => {
+
+    await logActivity({
+        userId: req.user.id,
+        action: "LOGOUT",
+        entity: "Admin_User",
+        entityId: req.user.id,
+        description: `${req.user.name} logged out`,
+        ipAddress: req.ip
+    });
 
     return res.status(200).json({
         success: true,

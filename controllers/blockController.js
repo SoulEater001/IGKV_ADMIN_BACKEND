@@ -1,4 +1,7 @@
-import {pool} from "../config/db.js"
+import { pool } from "../config/db.js"
+import { logActivity } from '../utils/activityLogger.js'
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
 
 export const getBlocksByDistrict = async (req, res) => {
     try {
@@ -28,7 +31,7 @@ export const getBlocksByDistrict = async (req, res) => {
         return res.status(200).json({
             success: true,
             data: rows,
-            count:rows.length
+            count: rows.length
         });
 
     } catch (error) {
@@ -248,7 +251,7 @@ export const createBlock = async (req, res) => {
 
         }
 
-        await pool.query(
+        const [result] = await pool.query(
             `
             INSERT INTO m_block
             (
@@ -268,6 +271,15 @@ export const createBlock = async (req, res) => {
                 longitude
             ]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.BLOCK,
+            entityId: result.insertId,
+            description: `${req.user.name} created block ${name.trim()}`,
+            ipAddress: req.ip
+        });
 
         return res.status(201).json({
             success: true,
@@ -310,7 +322,9 @@ export const updateBlock = async (req, res) => {
 
         const [[block]] = await pool.query(
             `
-            SELECT block_lg_code
+            SELECT block_id,
+            block_lg_code,
+            name
 
             FROM m_block
 
@@ -411,6 +425,20 @@ export const updateBlock = async (req, res) => {
             ]
         );
 
+        const description =
+            block.block_lg_code === block_lg_code
+                ? `${req.user.name} updated block ${name.trim()}`
+                : `${req.user.name} updated block ${name.trim()} and changed its LG code`;
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.BLOCK,
+            entityId: id,
+            description,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "Block updated successfully."
@@ -435,7 +463,10 @@ export const deleteBlock = async (req, res) => {
 
         const [[block]] = await pool.query(
             `
-            SELECT block_lg_code
+            SELECT
+                block_id,
+                block_lg_code,
+                name
 
             FROM m_block
 
@@ -496,6 +527,15 @@ export const deleteBlock = async (req, res) => {
             `,
             [id]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.BLOCK,
+            entityId: id,
+            description: `${req.user.name} deleted block ${block.name}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,

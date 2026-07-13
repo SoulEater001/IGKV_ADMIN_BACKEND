@@ -1,5 +1,8 @@
 import { pool } from "../config/db.js";
 import { PERMISSION_ACTIONS, PERMISSION_RESOURCES } from "../constant/index.js";
+import { logActivity } from '../utils/activityLogger.js'
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
 
 export const getPermissions = async (req, res) => {
     try {
@@ -69,7 +72,7 @@ export const createPermission = async (req, res) => {
             });
         }
 
-        await pool.query(
+        const [result] = await pool.query(
             `
             INSERT INTO permissions
             (
@@ -83,6 +86,15 @@ export const createPermission = async (req, res) => {
                 action.trim()
             ]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.PERMISSION,
+            entityId: result.insertId,
+            description: `${req.user.name} created permission ${resource.trim()}:${action.trim()}`,
+            ipAddress: req.ip
+        });
 
         return res.status(201).json({
             success: true,
@@ -123,7 +135,8 @@ export const updatePermission = async (req, res) => {
 
         const [[permission]] = await pool.query(
             `
-            SELECT id
+            SELECT id, resource,
+            action
             FROM permissions
             WHERE id = ?
             `,
@@ -174,6 +187,15 @@ export const updatePermission = async (req, res) => {
             ]
         );
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.PERMISSION,
+            entityId: id,
+            description: `${req.user.name} updated permission ${resource.trim()}:${action.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "Permission updated successfully."
@@ -198,7 +220,10 @@ export const deletePermission = async (req, res) => {
 
         const [[permission]] = await pool.query(
             `
-            SELECT id
+            SELECT
+                id,
+                resource,
+                action
             FROM permissions
             WHERE id = ?
             `,
@@ -235,6 +260,15 @@ export const deletePermission = async (req, res) => {
             `,
             [id]
         );
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.PERMISSION,
+            entityId: id,
+            description: `${req.user.name} deleted permission ${permission.resource}:${permission.action}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,

@@ -107,3 +107,40 @@ export const getDashboardStats = async (req, res) => {
 
     }
 };
+
+export const getActivities = async (req, res, next) => {
+
+    try {
+
+        const limit = Number(req.query.limit) || 10;
+
+        const [activities] = await pool.query(
+            `
+            SELECT
+                a.id,
+                a.action,
+                a.entity,
+                a.description,
+                a.created_at,
+                u.name
+            FROM activity_log a
+            JOIN admin_users u
+                ON u.id = a.user_id
+            ORDER BY a.created_at DESC
+            LIMIT ?
+            `,
+            [limit]
+        );
+
+        res.json({
+            success: true,
+            data: activities
+        });
+
+    } catch (err) {
+
+        next(err);
+
+    }
+
+};

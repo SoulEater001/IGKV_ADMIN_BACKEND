@@ -1,5 +1,8 @@
 import { pool } from "../config/db.js";
 import bcrypt from 'bcrypt'
+import { logActivity } from "../utils/activityLogger.js";
+import { ACTIONS } from "../constant/activityActions.js";
+import { ENTITIES } from "../constant/activityEntities.js";
 
 export const getUsers = async (req, res) => {
     try {
@@ -141,6 +144,15 @@ export const createUser = async (req, res) => {
 
         await connection.commit();
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.CREATE,
+            entity: ENTITIES.USER,
+            entityId: result.insertId,
+            description: `${req.user.name} created user ${name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(201).json({
             success: true,
             message: "User created successfully."
@@ -183,7 +195,7 @@ export const updateUser = async (req, res) => {
 
         const [[user]] = await connection.query(
             `
-            SELECT id
+            SELECT id, name
             FROM admin_users
             WHERE id = ?
             `,
@@ -295,6 +307,15 @@ export const updateUser = async (req, res) => {
 
         await connection.commit();
 
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.USER,
+            entityId: id,
+            description: `${req.user.name} updated user ${name.trim()}`,
+            ipAddress: req.ip
+        });
+
         return res.status(200).json({
             success: true,
             message: "User updated successfully."
@@ -323,6 +344,22 @@ export const deleteUser = async (req, res) => {
 
         const { id } = req.params;
 
+        const [[user]] = await pool.query(
+            `
+            SELECT id, name
+            FROM admin_users
+            WHERE id = ?
+            `,
+            [id]
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
         if (req.user.id == id) {
             return res.status(400).json({
                 success: false,
@@ -344,6 +381,15 @@ export const deleteUser = async (req, res) => {
                 message: "User not found."
             });
         }
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.USER,
+            entityId: id,
+            description: `${req.user.name} deleted user ${user.name}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,

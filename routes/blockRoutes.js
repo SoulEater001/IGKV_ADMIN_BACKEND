@@ -1,5 +1,6 @@
 import express from "express";
 import { getBlocksByDistrict, getBlockById, getBlocks, updateBlock, createBlock, deleteBlock } from "../controllers/blockController.js";
+import { authenticate } from '../middleware/authMiddleware.js'
 
 const router = express.Router();
 
@@ -9,10 +10,10 @@ router.get("/", getBlocks);
 
 router.get("/:id", getBlockById);
 
-router.post("/create", createBlock);
+router.post("/create", authenticate, createBlock);
 
-router.put("/:id", updateBlock);
+router.put("/:id", authenticate, updateBlock);
 
-router.delete("/:id", deleteBlock);
+router.delete("/:id", authenticate, deleteBlock);
 
 export default router;
