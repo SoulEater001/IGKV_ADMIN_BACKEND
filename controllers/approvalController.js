@@ -4,6 +4,7 @@ import { ENTITIES } from "../constant/activityEntities.js";
 import { ACTIONS } from "../constant/activityActions.js";
 import { APPROVAL_STATUS, ROLES } from "../constant/index.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { executeCreateRole, executeDeleteRole } from "../services/roleService.js";
 
 export const getApprovalRequests = async (req, res) => {
     try {
@@ -135,6 +136,24 @@ export const approveRequest = async (req, res) => {
 
                 break;
 
+            case `${ENTITIES.ROLE}:${ACTIONS.CREATE}`:
+
+                entityId = await executeCreateRole(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.ROLE}:${ACTIONS.DELETE}`:
+
+                entityId = await executeDeleteRole(
+                    connection,
+                    payload.id
+                );
+
+                break;
+
             default:
 
                 throw new Error("Unsupported resource.");
@@ -220,12 +239,45 @@ export const approveRequest = async (req, res) => {
 
 export const rejectRequest = async (req, res) => {
     const connection = await pool.getConnection();
+    let request;
     try {
 
         const { remarks } = req.body;
         await connection.beginTransaction();
 
-        const [result] = await connection.query(
+        [[request]] = await connection.query(
+            `
+            SELECT *
+            FROM approval_requests
+            WHERE id = ?
+            FOR UPDATE
+            `,
+            [req.params.id]
+        );
+
+        if (!request) {
+
+            await connection.rollback();
+
+            return res.status(404).json({
+                success: false,
+                message: "Approval request not found."
+            });
+
+        }
+
+        if (request.status !== APPROVAL_STATUS.PENDING) {
+
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Approval request already processed."
+            });
+
+        }
+
+        const [update] = await connection.query(
             `
             UPDATE approval_requests
             SET
@@ -240,13 +292,13 @@ export const rejectRequest = async (req, res) => {
             [
                 APPROVAL_STATUS.REJECTED,
                 req.user.id,
-                remarks,
+                remarks ?? null,
                 req.params.id,
                 APPROVAL_STATUS.PENDING,
             ]
         );
 
-        if (!result.affectedRows) {
+        if (!update.affectedRows) {
             return res.status(404).json({
                 success: false,
                 message: "Approval request not found."
@@ -254,6 +306,15 @@ export const rejectRequest = async (req, res) => {
         }
 
         await connection.commit();
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.REJECT,
+            entity: request.resource,
+            entityId: request.record_id,
+            description: `${req.user.name} rejected ${request.resource} ${request.action}`,
+            ipAddress: req.ip
+        });
 
         return res.status(200).json({
             success: true,
@@ -263,7 +324,7 @@ export const rejectRequest = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-        await connection.commit();
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to reject request."

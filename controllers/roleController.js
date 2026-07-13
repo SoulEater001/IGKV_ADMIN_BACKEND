@@ -2,6 +2,9 @@ import { pool } from "../config/db.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
+import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
+import { ROLES } from "../constant/index.js";
+import { executeCreateRole, executeDeleteRole } from '../services/roleService.js'
 
 export const getRoles = async (req, res) => {
     try {
@@ -34,21 +37,24 @@ export const getRoles = async (req, res) => {
 };
 
 export const createRole = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const {
             name,
             description
         } = req.body;
+        console.log(req.user)
 
         if (!name?.trim()) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Role name is required."
             });
         }
 
-        const [[existing]] = await pool.query(
+        const [[existing]] = await connection.query(
             `
             SELECT id
             FROM roles
@@ -58,44 +64,104 @@ export const createRole = async (req, res) => {
         );
 
         if (existing) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Role already exists."
             });
         }
 
-        const [result] = await pool.query(
-            `
-  INSERT INTO roles
-  (
-      name,
-      description
-  )
-  VALUES (?, ?)
-  `,
-            [
-                name.trim(),
-                description?.trim() || null
-            ]
-        );
+        const roleData = {
+            name: name.trim(),
+            description: description?.trim() || null
+        };
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.CREATE,
-            entity: ENTITIES.ROLE,
-            entityId: result.insertId,
-            description: `${req.user.name} created role ${name.trim()}`,
-            ipAddress: req.ip
-        });
+        if (
+            req.user.role === ROLES.ADMIN &&
+            roleData.name === ROLES.SUPER_ADMIN
+        ) {
 
-        return res.status(201).json({
-            success: true,
-            message: "Role created successfully.",
-            data: {
-                id: result.insertId
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: "You are not allowed to create a Super Admin role."
+            });
+
+        }
+        if (req.user.role === ROLES.ADMIN) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ROLE,
+                ACTIONS.CREATE,
+                "name",
+                roleData.name
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A role creation request with this name is already pending."
+                });
+
             }
-        });
 
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.ROLE,
+                action: ACTIONS.CREATE,
+                payload: roleData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.ROLE,
+                entityId: req.user.id,
+                description: `${req.user.name} requested creation of user ${roleData.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Role creation request sent for approval."
+            });
+
+        } else {
+
+
+
+            const roleId = await executeCreateRole(
+                connection,
+                roleData
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.ROLE,
+                entityId: roleId,
+                description: `${req.user.name} created role ${roleData.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(201).json({
+                success: true,
+                message: "Role created successfully.",
+                data: {
+                    id: roleId
+                }
+            });
+        }
     } catch (error) {
 
         console.error(error);
@@ -203,11 +269,12 @@ export const updateRole = async (req, res) => {
 };
 
 export const deleteRole = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
 
         const { id } = req.params;
-
-        const [[role]] = await pool.query(
+        await connection.beginTransaction();
+        const [[role]] = await connection.query(
             `
             SELECT id, name
             FROM roles
@@ -223,44 +290,79 @@ export const deleteRole = async (req, res) => {
             });
         }
 
-        const [[usage]] = await pool.query(
-            `
-            SELECT COUNT(*) AS total
-            FROM user_roles
-            WHERE role_id = ?
-            `,
-            [id]
-        );
+        const payload = {
+            id: role.id,
+            name: role.name
+        };
 
-        if (usage.total > 0) {
-            return res.status(409).json({
+        if (role.name === ROLES.SUPER_ADMIN) {
+
+            await connection.rollback();
+
+            return res.status(403).json({
                 success: false,
-                message: "Cannot delete role because it is assigned to one or more users."
+                message: "The Super Admin role cannot be deleted."
+            });
+
+        }
+        if (req.user.role === ROLES.ADMIN) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ROLE,
+                ACTIONS.DELETE,
+                "id",
+                role.id
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A delete request for this role is already pending."
+                });
+
+            }
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.ROLE,
+                action: ACTIONS.DELETE,
+                recordId: role.id,
+                payload,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Role deletion request sent for approval."
+            });
+        } else {
+
+            const deletedRoleId = await executeDeleteRole(
+                connection,
+                role.id
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.ROLE,
+                entityId: deletedRoleId,
+                description: `${req.user.name} deleted role ${role.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "Role deleted successfully."
             });
         }
-
-        await pool.query(
-            `
-            DELETE FROM roles
-            WHERE id = ?
-            `,
-            [id]
-        );
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.DELETE,
-            entity: ENTITIES.ROLE,
-            entityId: id,
-            description: `${req.user.name} deleted role ${role.name}`,
-            ipAddress: req.ip
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "Role deleted successfully."
-        });
-
     } catch (error) {
 
         console.error(error);
