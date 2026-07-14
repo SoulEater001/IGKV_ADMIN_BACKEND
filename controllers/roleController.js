@@ -5,6 +5,7 @@ import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { ROLES } from "../constant/index.js";
 import { executeCreateRole, executeDeleteRole } from '../services/roleService.js'
+import {requiresApproval, canManageRole, isSystemRole} from '../utils/approval.js'
 
 export const getRoles = async (req, res) => {
     try {
@@ -76,10 +77,7 @@ export const createRole = async (req, res) => {
             description: description?.trim() || null
         };
 
-        if (
-            req.user.role === ROLES.ADMIN &&
-            roleData.name === ROLES.SUPER_ADMIN
-        ) {
+        if (!canManageRole(req.user, roleData.name)) {
 
             await connection.rollback();
 
@@ -89,7 +87,7 @@ export const createRole = async (req, res) => {
             });
 
         }
-        if (req.user.role === ROLES.ADMIN) {
+        if (requiresApproval(req.user)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -296,7 +294,7 @@ export const deleteRole = async (req, res) => {
             name: role.name
         };
 
-        if (role.name === ROLES.SUPER_ADMIN) {
+        if (isSystemRole(role.name)) {
 
             await connection.rollback();
 
@@ -306,7 +304,7 @@ export const deleteRole = async (req, res) => {
             });
 
         }
-        if (req.user.role === ROLES.ADMIN) {
+        if (requiresApproval(req.user)) {
 
             const pending = await hasPendingApproval(
                 connection,

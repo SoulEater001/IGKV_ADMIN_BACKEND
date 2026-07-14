@@ -6,6 +6,7 @@ import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { executeCreateUser, executeDeleteUser } from "../services/adminUserService.js";
 import { ROLES } from "../constant/index.js";
+import { requiresApproval, canManageRole } from "../utils/approval.js";
 
 export const getUsers = async (req, res) => {
     try {
@@ -110,15 +111,12 @@ export const createUser = async (req, res) => {
             });
         }
 
-        if (
-            req.user.role === ROLES.ADMIN &&
-            role.name === ROLES.SUPER_ADMIN
-        ) {
+        if (!canManageRole(req.user, role.name)) {
             await connection.rollback();
 
             return res.status(403).json({
                 success: false,
-                message: "You are not allowed to create a Super Admin."
+                message: `You are not allowed to create users with the ${role.name} role.`
             });
         }
 
@@ -132,7 +130,7 @@ export const createUser = async (req, res) => {
             is_active
         };
 
-        if (req.user.role === ROLES.ADMIN) {
+        if (requiresApproval(req.user)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -408,15 +406,12 @@ export const deleteUser = async (req, res) => {
             });
         }
 
-        if (
-            req.user.role === ROLES.ADMIN &&
-            user.role === ROLES.SUPER_ADMIN
-        ) {
+        if (!canManageRole(req.user, role.name)) {
             await connection.rollback();
 
             return res.status(403).json({
                 success: false,
-                message: "You cannot delete a Super Admin."
+                message: `You cannot delete a ${role.name}.`
             });
         }
 
@@ -434,14 +429,14 @@ export const deleteUser = async (req, res) => {
             role: user.role
         };
 
-        if (req.user.role === ROLES.ADMIN) {
+        if (requiresApproval(req.user)) {
 
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.USER,
                 ACTIONS.DELETE,
                 {
-                    id:user.id
+                    id: user.id
                 }
             );
 

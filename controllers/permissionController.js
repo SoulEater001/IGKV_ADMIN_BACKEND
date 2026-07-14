@@ -83,7 +83,7 @@ export const createPermission = async (req, res) => {
             action: action.trim(),
         };
 
-        if (req.user.role === ROLES.ADMIN) {
+        if (requiresApproval(req.user)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -297,7 +297,7 @@ export const deletePermission = async (req, res) => {
             action: permission.action
         };
 
-        if (req.user.role === ROLES.ADMIN) {
+        if (requiresApproval(req.user)) {
 
             const pending = await hasPendingApproval(
                 connection,
