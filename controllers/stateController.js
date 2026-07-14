@@ -2,6 +2,9 @@ import { pool } from "../config/db.js"
 import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
+import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
+import { requiresApproval } from "../utils/approval.js";
+import { executeCreateState , executeDeleteState} from "../services/stateService.js";
 
 export const getStates = async (req, res) => {
     try {
@@ -147,65 +150,82 @@ export const createState = async (req, res) => {
                 message: "State already exists."
             });
         }
+        const stateData = {
+            name_en: name_en.trim(),
+            name_hi: name_hi.trim(),
+            state_lg_code
+        };
 
-        const [result] = await connection.query(
-            `
-            INSERT INTO m_state
-            (
-                name,
-                state_lg_code,
-                create_by
-            )
-            VALUES (?, ?, ?)
-            `,
-            [
-                name_en.trim(),
-                state_lg_code,
+        if (requiresApproval(req.user)) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.STATE,
+                ACTIONS.CREATE,
+                {
+                    state_lg_code,
+                    name_en: stateData.name_en
+                }
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A state creation request with this name or LG code is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.STATE,
+                action: ACTIONS.CREATE,
+                payload: stateData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.STATE,
+                entityId: req.user.id,
+                description: `${req.user.name} requested creation of state ${stateData.name_en}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "State creation request sent for approval."
+            });
+
+        } else {
+            const stateId = await executeCreateState(
+                connection,
+                stateData,
                 req.user.id
-            ]
-        );
-        const stateId = result.insertId;
+            );
 
-        await connection.query(
-            `
-            INSERT INTO m_state_language
-            (
-                state_id,
-                language_id,
-                name,
-                create_by
-            )
-            VALUES
-                (?, 2, ?, ?),
-                (?, 1, ?, ?)
-            `,
-            [
-                stateId,
-                name_en.trim(),
-                req.user.id,
+            await connection.commit();
 
-                stateId,
-                name_hi.trim(),
-                req.user.id
-            ]
-        );
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.STATE,
+                entityId: stateId,
+                description: `${req.user.name} created state ${stateData.name_en}`,
+                ipAddress: req.ip
+            });
 
-        await connection.commit();
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.CREATE,
-            entity: ENTITIES.STATE,
-            entityId: stateId,
-            description: `${req.user.name} created state ${name_en.trim()}`,
-            ipAddress: req.ip
-        });
-
-        return res.status(201).json({
-            success: true,
-            message: "State created successfully."
-        });
-
+            return res.status(201).json({
+                success: true,
+                message: "State created successfully."
+            });
+        }
     } catch (error) {
 
         console.error(error);
@@ -428,7 +448,7 @@ export const deleteState = async (req, res) => {
         await connection.beginTransaction();
         const { id } = req.params;
 
-        const [[state]] = await pool.query(
+        const [[state]] = await connection.query(
             `
             SELECT
                 name,
@@ -450,7 +470,7 @@ export const deleteState = async (req, res) => {
 
         const lgCode = state.state_lg_code;
 
-        const [[districtUsage]] = await pool.query(
+        const [[districtUsage]] = await connection.query(
             `
             SELECT COUNT(*) total
             FROM m_district
@@ -468,7 +488,7 @@ export const deleteState = async (req, res) => {
             });
         }
 
-        const [[mainUsage]] = await pool.query(
+        const [[mainUsage]] = await connection.query(
             `
             SELECT COUNT(*) total
             FROM imd_advisory_main
@@ -485,7 +505,7 @@ export const deleteState = async (req, res) => {
             });
         }
 
-        const [[detailUsage]] = await pool.query(
+        const [[detailUsage]] = await connection.query(
             `
             SELECT COUNT(*) total
             FROM imd_advisory_detail
@@ -502,51 +522,81 @@ export const deleteState = async (req, res) => {
             });
         }
 
-        await pool.query(
-            `
-            UPDATE m_state
-            SET
-                deleted='Y',
-                delete_datetime=NOW(),
-                delete_by = ?
-            WHERE state_id=?
-            `,
-            [req.user.id, id]
-        );
+        const payload = {
+            id: state.state_id,
+            name: state.name,
+            state_lg_code: state.state_lg_code
+        };
 
-        await connection.query(
-            `
-        UPDATE m_state_language
-        SET
-            deleted = 'Y',
-            delete_datetime = NOW(),
-            delete_by = ?
-        WHERE
-            state_id = ?
-            AND deleted IS NULL
-        `,
-            [
-                req.user.id,
-                id
-            ]
-        );
+        if (requiresApproval(req.user)) {
 
-        await connection.commit();
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.STATE,
+                ACTIONS.DELETE,
+                {
+                    id: state.state_id
+                }
+            );
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.DELETE,
-            entity: ENTITIES.STATE,
-            entityId: id,
-            description: `${req.user.name} deleted state ${state.name}`,
-            ipAddress: req.ip
-        });
+            if (pending) {
 
-        return res.status(200).json({
-            success: true,
-            message: "State deleted successfully."
-        });
+                await connection.rollback();
 
+                return res.status(409).json({
+                    success: false,
+                    message: "A delete request for this state is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.STATE,
+                action: ACTIONS.DELETE,
+                recordId: state.state_id,
+                payload,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.STATE,
+                entityId: state.state_id,
+                description: `${req.user.name} requested deletion of state ${state.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "State deletion request sent for approval."
+            });
+
+        } else {
+            await executeDeleteState(
+                connection,
+                state.state_id,
+                req.user.id
+            );
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.STATE,
+                entityId: state.state_id,
+                description: `${req.user.name} deleted state ${state.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "State deleted successfully."
+            });
+        }
     } catch (error) {
 
         console.error(error);

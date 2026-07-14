@@ -10,6 +10,7 @@ import { executeCreateCategory, executeDeleteCategory } from "../services/catego
 import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType } from "../services/advisoryService.js";
 import { executeCreateCrop, executeDeleteCrop } from '../services/cropService.js'
 import { executeCreateZone, executeDeleteZone} from "../services/zoneService.js";
+import { executeCreateState, executeDeleteState } from "../services/stateService.js";
 
 export const getApprovalRequests = async (req, res) => {
     try {
@@ -246,6 +247,7 @@ export const approveRequest = async (req, res) => {
                 );
 
                 break;
+                
             case `${ENTITIES.ZONE}:${ACTIONS.CREATE}`:
 
                 entityId = await executeCreateZone(
@@ -257,6 +259,23 @@ export const approveRequest = async (req, res) => {
             case `${ENTITIES.ZONE}:${ACTIONS.DELETE}`:
 
                 entityId = await executeDeleteZone(
+                    connection,
+                    payload.id
+                );
+
+                break;
+
+            case `${ENTITIES.STATE}:${ACTIONS.CREATE}`:
+
+                entityId = await executeCreateState(
+                    connection,
+                    payload
+                );
+
+                break;
+            case `${ENTITIES.STATE}:${ACTIONS.DELETE}`:
+
+                entityId = await executeDeleteState(
                     connection,
                     payload.id
                 );
