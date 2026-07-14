@@ -1,4 +1,4 @@
-import { ROLES } from "../constant";
+import { ROLES } from "../constant/index.js";
 
 export const SYSTEM_ROLES = new Set([
     ROLES.SUPER_ADMIN

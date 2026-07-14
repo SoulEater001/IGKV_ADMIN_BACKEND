@@ -170,6 +170,10 @@ export const createRole = async (req, res) => {
             message: "Failed to create role."
         });
 
+    }finally {
+
+        connection.release();
+
     }
 };
 
@@ -371,6 +375,10 @@ export const deleteRole = async (req, res) => {
             success: false,
             message: "Failed to delete role."
         });
+
+    }finally {
+
+        connection.release();
 
     }
 };

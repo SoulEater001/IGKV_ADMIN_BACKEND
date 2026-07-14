@@ -2,6 +2,9 @@ import { pool } from "../config/db.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
+import { requiresApproval } from '../utils/approval.js'
+import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
+import { executeCreateCategory, executeDeleteCategory } from "../services/categoryService.js";
 
 export const getCategories = async (req, res) => {
     try {
@@ -33,66 +36,125 @@ export const getCategories = async (req, res) => {
 };
 
 export const createCategory = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
+        await connection.beginTransaction();
         const { img_category_name } = req.body;
 
         if (!img_category_name?.trim()) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Category name is required."
             });
         }
 
-        const [result] = await pool.query(
+        const categoryData = {
+            img_category_name: img_category_name.trim()
+        };
+
+        const [[existing]] = await connection.query(
             `
-            INSERT INTO imd_m_category
-            (
-                img_category_name
-            )
-            VALUES (?)
+            SELECT id
+            FROM imd_m_category
+            WHERE img_category_name = ?
             `,
-            [img_category_name.trim()]
+            [categoryData.img_category_name]
         );
 
-        const categoryId = result.insertId;
+        if (existing) {
 
-        await pool.query(
-            `
-            UPDATE imd_m_category
-            SET imd_category_id = ?
-            WHERE id = ?
-            `,
-            [categoryId, categoryId]
-        );
+            await connection.rollback();
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.CREATE,
-            entity: ENTITIES.CATEGORY,
-            entityId: categoryId,
-            description: `${req.user.name} created category ${img_category_name.trim()}`,
-            ipAddress: req.ip
-        });
+            return res.status(409).json({
+                success: false,
+                message: "Category already exists."
+            });
 
-        return res.status(201).json({
-            success: true,
-            message: "Category created successfully.",
-            data: {
-                id: categoryId,
-                imd_category_id: categoryId
+        }
+
+        if (requiresApproval(req.user)) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.CATEGORY,
+                ACTIONS.CREATE,
+                {
+                    img_category_name: categoryData.img_category_name
+                }
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A category creation request with this name is already pending."
+                });
+
             }
-        });
 
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.CATEGORY,
+                action: ACTIONS.CREATE,
+                payload: categoryData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.CATEGORY,
+                entityId: req.user.id,
+                description: `${req.user.name} requested creation of category ${categoryData.img_category_name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Category creation request sent for approval."
+            });
+
+        } else {
+            const categoryId = await executeCreateCategory(
+                connection,
+                categoryData
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.CATEGORY,
+                entityId: categoryId,
+                description: `${req.user.name} created category ${categoryData.img_category_name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(201).json({
+                success: true,
+                message: "Category created successfully.",
+                data: {
+                    id: categoryId,
+                    imd_category_id: categoryId
+                }
+            });
+        }
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to create category."
         });
 
-    }
+    } finally { connection.release(); }
 };
 
 export const updateCategory = async (req, res) => {
@@ -162,11 +224,12 @@ export const updateCategory = async (req, res) => {
 };
 
 export const deleteCategory = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const { id } = req.params;
 
-        const [[category]] = await pool.query(
+        const [[category]] = await connection.query(
             `
             SELECT
                 id,
@@ -178,13 +241,14 @@ export const deleteCategory = async (req, res) => {
         );
 
         if (!category) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Category not found."
             });
         }
 
-        const [[advisoryUsage]] = await pool.query(
+        const [[advisoryUsage]] = await connection.query(
             `
             SELECT COUNT(*) AS total
             FROM imd_advisory_detail
@@ -194,13 +258,14 @@ export const deleteCategory = async (req, res) => {
         );
 
         if (advisoryUsage.total > 0) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete category because it is used by existing advisories."
             });
         }
 
-        const [[cropUsage]] = await pool.query(
+        const [[cropUsage]] = await connection.query(
             `
             SELECT COUNT(*) AS total
             FROM imd_m_crop
@@ -210,42 +275,95 @@ export const deleteCategory = async (req, res) => {
         );
 
         if (cropUsage.total > 0) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete category because it is assigned to existing crops."
             });
         }
 
-        await pool.query(
-            `
-            DELETE FROM imd_m_category
-            WHERE id = ?
-            `,
-            [id]
-        );
+        const payload = {
+            id: category.id,
+            img_category_name: category.img_category_name
+        };
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.DELETE,
-            entity: ENTITIES.CATEGORY,
-            entityId: id,
-            description: `${req.user.name} deleted category ${category.img_category_name}`,
-            ipAddress: req.ip
-        });
+        if (requiresApproval(req.user)) {
 
-        return res.status(200).json({
-            success: true,
-            message: "Category deleted successfully."
-        });
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.CATEGORY,
+                ACTIONS.DELETE,
+                {
+                    id: category.id
+                }
+            );
 
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A delete request for this category is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.CATEGORY,
+                action: ACTIONS.DELETE,
+                recordId: category.id,
+                payload,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.CATEGORY,
+                entityId: category.id,
+                description: `${req.user.name} requested deletion of category ${category.img_category_name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Category deletion request sent for approval."
+            });
+
+        } else {
+            const categoryId = await executeDeleteCategory(
+                connection,
+                category.id
+            );
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.CATEGORY,
+                entityId: categoryId,
+                description: `${req.user.name} deleted category ${category.img_category_name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "Category deleted successfully."
+            });
+        }
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to delete category."
         });
 
+    } finally {
+        connection.release();
     }
-};
+};  
