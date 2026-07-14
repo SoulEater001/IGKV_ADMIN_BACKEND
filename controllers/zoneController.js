@@ -2,6 +2,9 @@ import { pool } from "../config/db.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
+import { requiresApproval } from '../utils/approval.js'
+import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
+import { executeCreateZone, executeDeleteZone } from "../services/zoneService.js";
 
 export const getZones = async (req, res) => {
     try {
@@ -138,69 +141,83 @@ export const createZone = async (req, res) => {
             });
         }
 
-        const [result] = await connection.query(
-            `
-            INSERT INTO m_zone
-            (
-                name,
-                state_id,
-                Image_Path,
-                create_by
-            )
-            VALUES (?, ?,?,?)
-            `,
-            [
-                name_en.trim(),
-                state_id,
-                imagePath,
+        const zoneData = {
+            name_en: name_en.trim(),
+            name_hi: name_hi.trim(),
+            state_id,
+            imagePath
+        };
+
+        if (requiresApproval(req.user)) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ZONE,
+                ACTIONS.CREATE,
+                {
+                    name_en: zoneData.name_en,
+                    state_id: zoneData.state_id
+                }
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A zone creation request with this name already exists."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.ZONE,
+                action: ACTIONS.CREATE,
+                payload: zoneData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.ZONE,
+                entityId: req.user.id,
+                description: `${req.user.name} requested creation of zone ${zoneData.name_en}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Zone creation request sent for approval."
+            });
+
+        } else {
+            const zoneId = await executeCreateZone(
+                connection,
+                zoneData,
                 req.user.id
-            ]
-        );
-        const zoneId = result.insertId;
+            );
 
-        await connection.query(
-            `
-                INSERT INTO m_zone_language
-                (
-                    zone_id,
-                    state_id,
-                    language_id,
-                    name,
-                    create_by
-                )
-                VALUES
-                    (?, ?, 2, ?, ?),
-                    (?, ?, 1, ?, ?)
-            `,
-            [
-                zoneId,
-                state_id,
-                name_en.trim(),
-                req.user.id,
+            await connection.commit();
 
-                zoneId,
-                state_id,
-                name_hi.trim(),
-                req.user.id
-            ]
-        );
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.ZONE,
+                entityId: zoneId,
+                description: `${req.user.name} created zone ${zoneData.name_en}`,
+                ipAddress: req.ip
+            });
 
-        await connection.commit();
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.CREATE,
-            entity: ENTITIES.ZONE,
-            entityId: result.insertId,
-            description: `${req.user.name} created zone ${name_en.trim()}`,
-            ipAddress: req.ip
-        });
-
-        return res.status(201).json({
-            success: true,
-            message: "Zone created successfully."
-        });
-
+            return res.status(201).json({
+                success: true,
+                message: "Zone created successfully."
+            });
+        }
     } catch (error) {
 
         console.error(error);
@@ -391,7 +408,7 @@ export const deleteZone = async (req, res) => {
         }
 
         // Check if zone has districts
-        const [districts] = await connection.query(
+        const [[districts]] = await connection.query(
             `
             SELECT COUNT(*) AS total
             FROM m_district
@@ -401,13 +418,17 @@ export const deleteZone = async (req, res) => {
             [id]
         );
 
-        if (districts[0].total > 0) {
+        if (districts.total > 0) {
             await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Cannot delete zone because it contains districts.",
             });
         }
+        const payload = {
+            id: zone.Zone_id,
+            name: zone.name
+        };
 
         const [result] = await connection.query(
             `
@@ -423,47 +444,75 @@ export const deleteZone = async (req, res) => {
         );
 
 
-        await connection.query(
-            `
-            UPDATE m_zone_language
-            SET
-                deleted = 'Y',
-                delete_datetime = NOW(),
-                delete_by = ?
-            WHERE
-                zone_id = ?
-                AND deleted IS NULL
-            `,
-            [
-                req.user.id,
-                id
-            ]
-        );
+        if (requiresApproval(req.user)) {
 
-        if (!result.affectedRows) {
-            await connection.rollback();
-            return res.status(404).json({
-                success: false,
-                message: "Zone not found.",
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ZONE,
+                ACTIONS.DELETE,
+                {
+                    id: zone.Zone_id
+                }
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A delete request for this zone is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.ZONE,
+                action: ACTIONS.DELETE,
+                recordId: zone.Zone_id,
+                payload,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.ZONE,
+                entityId: zone.Zone_id,
+                description: `${req.user.name} requested deletion of zone ${zone.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Zone deletion request sent for approval."
+            });
+
+        } else {
+            await executeDeleteZone(
+                connection,
+                zone.Zone_id,
+                req.user.id
+            );
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.ZONE,
+                entityId: zone.Zone_id,
+                description: `${req.user.name} deleted zone ${zone.name}`,
+                ipAddress: req.ip
+            });
+
+            res.json({
+                success: true,
+                message: "Zone deleted successfully.",
             });
         }
-        await connection.commit();
-
-
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.DELETE,
-            entity: ENTITIES.ZONE,
-            entityId: id,
-            description: `${req.user.name} deleted zone ${zone.name}`,
-            ipAddress: req.ip
-        });
-
-        res.json({
-            success: true,
-            message: "Zone deleted successfully.",
-        });
     } catch (error) {
         console.error(error);
         await connection.rollback();
@@ -471,5 +520,9 @@ export const deleteZone = async (req, res) => {
             success: false,
             message: "Failed to delete zone.",
         });
+    }finally {
+
+        connection.release();
+
     }
 };
