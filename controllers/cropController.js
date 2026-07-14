@@ -2,6 +2,9 @@ import { pool } from "../config/db.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
+import { requiresApproval } from '../utils/approval.js'
+import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
+import { executeDeleteCrop } from "../services/cropService.js";
 
 export const getCrops = async (req, res) => {
     try {
@@ -67,76 +70,130 @@ export const getCrops = async (req, res) => {
 };
 
 export const createCrop = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const {
             imd_crop_name,
             imd_crop_name_h,
             imd_category_id
         } = req.body;
 
-        if (!imd_crop_name?.trim()) {
+        if (!imd_crop_name?.trim() || !imd_crop_name_h?.trim() || !imd_category_id) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
-                message: "Crop name is required."
+                message: "All fields are required."
             });
         }
 
-        const [result] = await pool.query(
-            `
-            INSERT INTO imd_m_crop
-            (
-                imd_crop_name,
-                imd_crop_name_h,
-                imd_category_id
-            )
-            VALUES (?, ?, ?)
-            `,
-            [
-                imd_crop_name.trim(),
-                imd_crop_name_h?.trim() || null,
-                imd_category_id || null
-            ]
-        );
+        const cropData = {
+            imd_crop_name: imd_crop_name.trim(),
+            imd_crop_name_h: imd_crop_name_h?.trim(),
+            imd_category_id: imd_category_id
+        };
 
-        const cropId = result.insertId;
-
-        await pool.query(
+        const [[category]] = await connection.query(
             `
-            UPDATE imd_m_crop
-            SET imd_crop_id = ?
+            SELECT id
+            FROM imd_m_category
             WHERE id = ?
             `,
-            [cropId, cropId]
+            [imd_category_id]
         );
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.CREATE,
-            entity: ENTITIES.CROP,
-            entityId: cropId,
-            description: `${req.user.name} created crop ${imd_crop_name.trim()}`,
-            ipAddress: req.ip
-        });
+        if (!category) {
+            await connection.rollback();
 
-        return res.status(201).json({
-            success: true,
-            message: "Crop created successfully.",
-            data: {
-                id: cropId,
-                imd_crop_id: cropId
+            return res.status(404).json({
+                success: false,
+                message: "Category not found."
+            });
+        }
+
+        if (requiresApproval(req.user)) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.CROP,
+                ACTIONS.CREATE,
+                {
+                    imd_crop_name: cropData.imd_crop_name
+                }
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A crop creation request with this name is already pending."
+                });
+
             }
-        });
 
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.CROP,
+                action: ACTIONS.CREATE,
+                payload: cropData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.CROP,
+                entityId: req.user.id,
+                description: `${req.user.name} requested creation of crop ${cropData.imd_crop_name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Crop creation request sent for approval."
+            });
+
+        } else {
+            const cropId = await executeCreateCrop(
+                connection,
+                cropData
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.CROP,
+                entityId: cropId,
+                description: `${req.user.name} created crop ${cropData.imd_crop_name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(201).json({
+                success: true,
+                message: "Crop created successfully.",
+                data: {
+                    id: cropId,
+                    imd_crop_id: cropId
+                }
+            });
+        }
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to create crop."
         });
 
+    } finally {
+        connection.release();
     }
 };
 
@@ -218,11 +275,13 @@ export const updateCrop = async (req, res) => {
 };
 
 export const deleteCrop = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
+        await connection.beginTransaction();
 
         const { id } = req.params;
 
-        const [[crop]] = await pool.query(
+        const [[crop]] = await connection.query(
             `
                 SELECT
                     id,
@@ -234,6 +293,7 @@ export const deleteCrop = async (req, res) => {
         );
 
         if (!crop) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Crop not found."
@@ -256,36 +316,90 @@ export const deleteCrop = async (req, res) => {
             });
         }*/
 
-        await pool.query(
-            `
-            DELETE FROM imd_m_crop
-            WHERE id = ?
-            `,
-            [id]
-        );
+        const payload = {
+            id: crop.id,
+            imd_crop_name: crop.imd_crop_name
+        };
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.DELETE,
-            entity: ENTITIES.CROP,
-            entityId: id,
-            description: `${req.user.name} deleted crop ${crop.imd_crop_name}`,
-            ipAddress: req.ip
-        });
+        if (requiresApproval(req.user)) {
 
-        return res.status(200).json({
-            success: true,
-            message: "Crop deleted successfully."
-        });
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.CROP,
+                ACTIONS.DELETE,
+                {
+                    id: crop.id
+                }
+            );
 
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A delete request for this crop is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.CROP,
+                action: ACTIONS.DELETE,
+                recordId: crop.id,
+                payload,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.CROP,
+                entityId: crop.id,
+                description: `${req.user.name} requested deletion of crop ${crop.imd_crop_name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Crop deletion request sent for approval."
+            });
+
+        } else {
+            const cropId = await executeDeleteCrop(
+                connection,
+                crop.id
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.CROP,
+                entityId: cropId,
+                description: `${req.user.name} deleted crop ${crop.imd_crop_name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "Crop deleted successfully."
+            });
+        }
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to delete crop."
         });
 
+    } finally {
+        connection.release();
     }
 };

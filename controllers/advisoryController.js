@@ -200,7 +200,7 @@ export const createAdvisoryType = async (req, res) => {
             imd_advisory_type_name_h
         } = req.body;
 
-        if (!imd_advisory_type_name?.trim() && !imd_advisory_type_name_h.trim()) {
+        if (!imd_advisory_type_name?.trim() || !imd_advisory_type_name_h.trim()) {
             await connection.rollback();
             return res.status(400).json({
                 success: false,

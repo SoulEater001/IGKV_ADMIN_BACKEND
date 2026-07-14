@@ -8,6 +8,7 @@ import { executeCreateRole, executeDeleteRole } from "../services/roleService.js
 import { executeCreatePermission, executeDeletePermission } from "../services/permissionService.js";
 import { executeCreateCategory, executeDeleteCategory } from "../services/categoryService.js";
 import { executeCreateAdvisoryType, executeDeleteAdvisoryType } from "../services/advisoryService.js";
+import {executeCreateCrop, executeDeleteCrop} from '../services/cropService.js'
 
 export const getApprovalRequests = async (req, res) => {
     try {
@@ -205,6 +206,23 @@ export const approveRequest = async (req, res) => {
             case `${ENTITIES.ADVISORY_TYPE}:${ACTIONS.DELETE}`:
 
                 entityId = await executeDeleteAdvisoryType(
+                    connection,
+                    payload.id
+                );
+
+                break;
+
+            case `${ENTITIES.CROP}:${ACTIONS.CREATE}`:
+
+                entityId = await executeCreateCrop(
+                    connection,
+                    payload
+                );
+
+                break;
+            case `${ENTITIES.CROP}:${ACTIONS.DELETE}`:
+
+                entityId = await executeDeleteCrop(
                     connection,
                     payload.id
                 );
