@@ -3,7 +3,7 @@ import { PERMISSION_ACTIONS, PERMISSION_RESOURCES } from "../constant/index.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
-import { executeCreatePermission } from "../services/permissionService.js";
+import { executeCreatePermission, executeDeletePermission } from "../services/permissionService.js";
 import { ROLES } from "../constant/index.js";
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
 

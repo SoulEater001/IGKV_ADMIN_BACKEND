@@ -4,7 +4,7 @@ import { ENTITIES } from "../constant/activityEntities.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
 import { requiresApproval } from '../utils/approval.js'
-import { executeCreateAdvisoryType } from "../services/advisoryService.js";
+import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType } from "../services/advisoryService.js";
 
 export const getAdvisories = async (req, res) => {
     try {
@@ -508,7 +508,7 @@ export const deleteAdvisoryType = async (req, res) => {
             success: false,
             message: "Failed to delete advisory type."
         });
-    }finally{
+    } finally {
         await connection.release();
     }
 };
@@ -609,8 +609,10 @@ export const updateAdvisory = async (req, res) => {
 };
 
 export const createAdvisory = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-        console.log(req.user);
+
+        await connection.beginTransaction();
         const {
             state_lg_code,
             district_lg_code,
@@ -621,7 +623,6 @@ export const createAdvisory = async (req, res) => {
             advisory,
             advisory_date
         } = req.body;
-        console.log(req.body)
 
         if (
             state_lg_code == null ||
@@ -632,116 +633,119 @@ export const createAdvisory = async (req, res) => {
             advisory_date == null ||
             advisory.trim() === ""
         ) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Please fill all required fields."
             });
         }
 
+        const advisoryData = {
+            state_lg_code,
+            district_lg_code,
+            block_lg_code,
+            imd_category_id,
+            imd_advisory_type_id,
+            language_id,
+            advisory: advisory.trim(),
+            advisory_date
+        };
+
         //
         // Find today's advisory_main row.
         // If none exists, create one.
         //
-        const advisoryDate = advisory_date;
+        if (requiresApproval(req.user)) {
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ADVISORY,
+                ACTIONS.CREATE,
+                {
+                    advisory_date,
+                    state_lg_code,
+                    district_lg_code,
+                    block_lg_code,
+                    language_id
+                }
+            );
 
-        const [mainRows] = await pool.query(
-            `
-      SELECT id
-      FROM imd_advisory_main
-      WHERE DATE(advisory_date) = ?
-      LIMIT 1
-      `,
-            [advisoryDate]
-        );
+            if (pending) {
 
-        let advisoryMainId;
+                await connection.rollback();
 
-        if (mainRows.length > 0) {
-            advisoryMainId = mainRows[0].id;
+                return res.status(409).json({
+                    success: false,
+                    message: "A similar advisory creation request is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.ADVISORY,
+                action: ACTIONS.CREATE,
+                payload: advisoryData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.ADVISORY,
+                entityId: req.user.id,
+                description: `${req.user.name} requested creation of an advisory`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Advisory creation request sent for approval."
+            });
+
         } else {
-            const [result] = await pool.query(
-                `
-        INSERT INTO imd_advisory_main
-        (
-          advisory_date,
-          create_datetime
-        )
-        VALUES (?, NOW())
-        `,
-                [advisoryDate]
+            const advisoryId = await executeCreateAdvisory(
+                connection,
+                advisoryData
             );
 
-            advisoryMainId = result.insertId;
-            await pool.query(
-                `
-    UPDATE imd_advisory_main
-    SET advisory_main_id = ?
-    WHERE id = ?
-    `,
-                [advisoryMainId, advisoryMainId]
-            );
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.ADVISORY,
+                entityId: advisoryId,
+                description: `${req.user.name} created an advisory`,
+                ipAddress: req.ip
+            });
+
+            res.status(201).json({
+                success: true,
+                message: "Advisory created successfully."
+            });
         }
-
-        const [detailResult] = await pool.query(
-            `
-      INSERT INTO imd_advisory_detail
-      (
-        advisory_main_id,
-        state_lg_code,
-        district_lg_code,
-        block_lg_code,
-        cat_id,
-        advisory_type_id,
-        advisory,
-        language_id
-      )
-      VALUES
-      (
-        ?, ?, ?, ?, ?, ?, ?, ?
-      )
-      `,
-            [
-                advisoryMainId,
-                state_lg_code,
-                district_lg_code,
-                block_lg_code,
-                imd_category_id,
-                imd_advisory_type_id,
-                advisory.trim(),
-                language_id
-            ]
-        );
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.CREATE,
-            entity: ENTITIES.ADVISORY,
-            entityId: detailResult.insertId,
-            description: `${req.user.name} created an advisory`,
-            ipAddress: req.ip
-        });
-
-        res.status(201).json({
-            success: true,
-            message: "Advisory created successfully."
-        });
-
     } catch (error) {
         console.error(error);
-
+        await connection.rollback();
         res.status(500).json({
             success: false,
             message: "Failed to create advisory."
         });
+    } finally {
+        connection.release();
     }
 };
 
 export const deleteAdvisory = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
+        await connection.beginTransaction();
 
         const { id } = req.params;
 
-        const [rows] = await pool.query(
+        const [[advisory]] = await connection.query(
             `
             SELECT
                 id,
@@ -752,67 +756,98 @@ export const deleteAdvisory = async (req, res) => {
             [id]
         );
 
-        if (rows.length === 0) {
+        if (!advisory) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Advisory not found."
             });
         }
 
-        const advisory = rows[0];
+        const payload = {
+            id: advisory.id,
+            advisory_main_id: advisory.advisory_main_id
+        };
 
-        await pool.query(
-            `
-            DELETE FROM imd_advisory_detail
-            WHERE id = ?
-            `,
-            [id]
-        );
+        if (requiresApproval(req.user)) {
 
-        // Remove advisory_main if no details remain
-        const [[remaining]] = await pool.query(
-            `
-            SELECT COUNT(*) AS total
-            FROM imd_advisory_detail
-            WHERE advisory_main_id = ?
-            `,
-            [advisory.advisory_main_id]
-        );
-
-        if (remaining.total === 0) {
-
-            await pool.query(
-                `
-                DELETE FROM imd_advisory_main
-                WHERE id = ?
-                `,
-                [advisory.advisory_main_id]
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ADVISORY,
+                ACTIONS.DELETE,
+                {
+                    id: advisory.id
+                }
             );
 
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A delete request for this advisory is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.ADVISORY,
+                action: ACTIONS.DELETE,
+                recordId: advisory.id,
+                payload,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.ADVISORY,
+                entityId: advisory.id,
+                description: `${req.user.name} requested deletion of an advisory`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Advisory deletion request sent for approval."
+            });
+
+        } else {
+            const advisoryId = await executeDeleteAdvisory(
+                connection,
+                advisory.id
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.ADVISORY,
+                entityId: advisoryId,
+                description: `${req.user.name} deleted an advisory`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "Advisory deleted successfully."
+            });
         }
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.DELETE,
-            entity: ENTITIES.ADVISORY,
-            entityId: id,
-            description: `${req.user.name} deleted an advisory`,
-            ipAddress: req.ip
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "Advisory deleted successfully."
-        });
-
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to delete advisory."
         });
 
+    } finally {
+        connection.release();
     }
 };

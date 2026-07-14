@@ -7,8 +7,8 @@ import { logActivity } from "../utils/activityLogger.js";
 import { executeCreateRole, executeDeleteRole } from "../services/roleService.js";
 import { executeCreatePermission, executeDeletePermission } from "../services/permissionService.js";
 import { executeCreateCategory, executeDeleteCategory } from "../services/categoryService.js";
-import { executeCreateAdvisoryType, executeDeleteAdvisoryType } from "../services/advisoryService.js";
-import {executeCreateCrop, executeDeleteCrop} from '../services/cropService.js'
+import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType } from "../services/advisoryService.js";
+import { executeCreateCrop, executeDeleteCrop } from '../services/cropService.js'
 
 export const getApprovalRequests = async (req, res) => {
     try {
@@ -80,7 +80,6 @@ export const approveRequest = async (req, res) => {
     const connection = await pool.getConnection();
     let request;
     try {
-        console.log(req.body);
 
         await connection.beginTransaction();
 
@@ -229,6 +228,24 @@ export const approveRequest = async (req, res) => {
 
                 break;
 
+            case `${ENTITIES.ADVISORY}:${ACTIONS.CREATE}`:
+
+                entityId = await executeCreateAdvisory(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.ADVISORY}:${ACTIONS.DELETE}`:
+
+                entityId = await executeDeleteAdvisory(
+                    connection,
+                    payload.id
+                );
+
+                break;
+
             default:
 
                 throw new Error("Unsupported resource.");
@@ -292,7 +309,7 @@ export const approveRequest = async (req, res) => {
                     APPROVAL_STATUS.REJECTED,
                     req.user.id,
                     error.message,
-                    remarks,
+                    remarks??null,
                     request.id
                 ]
             );

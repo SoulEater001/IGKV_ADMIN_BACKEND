@@ -67,3 +67,138 @@ export const executeDeleteAdvisoryType = async (
     return advisoryTypeId;
 
 };
+
+export const executeCreateAdvisory = async (
+    connection,
+    data
+) => {
+
+    const [mainRows] = await connection.query(
+        `
+        SELECT id
+        FROM imd_advisory_main
+        WHERE DATE(advisory_date) = ?
+        LIMIT 1
+        `,
+        [data.advisory_date]
+    );
+
+    let advisoryMainId;
+
+    if (mainRows.length > 0) {
+
+        advisoryMainId = mainRows[0].id;
+
+    } else {
+
+        const [result] = await connection.query(
+            `
+            INSERT INTO imd_advisory_main
+            (
+                advisory_date,
+                create_datetime
+            )
+            VALUES (?, NOW())
+            `,
+            [data.advisory_date]
+        );
+
+        advisoryMainId = result.insertId;
+
+        await connection.query(
+            `
+            UPDATE imd_advisory_main
+            SET advisory_main_id = ?
+            WHERE id = ?
+            `,
+            [
+                advisoryMainId,
+                advisoryMainId
+            ]
+        );
+
+    }
+
+    const [detailResult] = await connection.query(
+        `
+        INSERT INTO imd_advisory_detail
+        (
+            advisory_main_id,
+            state_lg_code,
+            district_lg_code,
+            block_lg_code,
+            cat_id,
+            advisory_type_id,
+            advisory,
+            language_id
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+            advisoryMainId,
+            data.state_lg_code,
+            data.district_lg_code,
+            data.block_lg_code,
+            data.imd_category_id,
+            data.imd_advisory_type_id,
+            data.advisory,
+            data.language_id
+        ]
+    );
+
+    return detailResult.insertId;
+
+};
+
+export const executeDeleteAdvisory = async (
+    connection,
+    advisoryId
+) => {
+
+    const [[advisory]] = await connection.query(
+        `
+        SELECT
+            id,
+            advisory_main_id
+        FROM imd_advisory_detail
+        WHERE id = ?
+        `,
+        [advisoryId]
+    );
+
+    if (!advisory) {
+        throw new Error("Advisory not found.");
+    }
+
+    await connection.query(
+        `
+        DELETE FROM imd_advisory_detail
+        WHERE id = ?
+        `,
+        [advisoryId]
+    );
+
+    const [[remaining]] = await connection.query(
+        `
+        SELECT COUNT(*) AS total
+        FROM imd_advisory_detail
+        WHERE advisory_main_id = ?
+        `,
+        [advisory.advisory_main_id]
+    );
+
+    if (remaining.total === 0) {
+
+        await connection.query(
+            `
+            DELETE FROM imd_advisory_main
+            WHERE id = ?
+            `,
+            [advisory.advisory_main_id]
+        );
+
+    }
+
+    return advisoryId;
+
+};
