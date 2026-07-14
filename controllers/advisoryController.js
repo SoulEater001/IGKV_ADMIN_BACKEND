@@ -10,10 +10,13 @@ export const getAdvisories = async (req, res) => {
             districtLgCode,
             blockLgCode,
             languageId,
+            advisoryDate,
+            search = '',
             page = 1,
             limit = 10,
         } = req.query;
-
+        console.log("date", advisoryDate)
+        console.log("search", search)
         if (!stateLgCode || !districtLgCode || !blockLgCode || !languageId) {
             return res.status(400).json({
                 success: false,
@@ -24,18 +27,72 @@ export const getAdvisories = async (req, res) => {
         const pageNumber = Number(page);
         const pageSize = Number(limit);
         const offset = (pageNumber - 1) * pageSize;
+        const where = [
+                "d.state_lg_code = ?",
+                "d.district_lg_code = ?",
+                "d.block_lg_code = ?",
+                "d.language_id = ?",
+        ];
+
+        const params = [
+            stateLgCode,
+            districtLgCode,
+            blockLgCode,
+            languageId
+        ];
+
+        if (advisoryDate) {
+            where.push("DATE(m.advisory_date) = ?");
+            params.push(advisoryDate); // yyyy-mm-dd
+        }
+        const whereSql = where.join("\nAND ");
+
+        let searchSql = "";
+
+        if (search?.trim()) {
+
+            searchSql = `
+                AND (
+                    CAST(d.id AS CHAR) LIKE ?
+                    OR d.advisory LIKE ?
+                    OR c.img_category_name LIKE ?
+                    OR at.imd_advisory_type_name LIKE ?
+                    OR DATE_FORMAT(m.advisory_date, '%d-%m-%Y') LIKE ?
+                )
+            `;
+
+            const keyword = `%${search.trim()}%`;
+
+            params.push(
+                keyword,
+                keyword,
+                keyword,
+                keyword,
+                keyword
+            );
+
+        }
 
         // Total records
         const [[countResult]] = await pool.query(
             `
             SELECT COUNT(*) AS total
-            FROM imd_advisory_detail
-            WHERE state_lg_code = ?
-              AND district_lg_code = ?
-              AND block_lg_code = ?
-              AND language_id = ?
+            FROM imd_advisory_detail d
+
+            JOIN imd_advisory_main m
+                ON d.advisory_main_id = m.id
+
+            LEFT JOIN imd_m_category c
+                ON d.cat_id = c.imd_category_id
+
+            LEFT JOIN imd_advisory_type at
+                ON d.advisory_type_id = at.imd_advisory_type_id
+
+            WHERE
+                ${whereSql}
+                ${searchSql}
             `,
-            [stateLgCode, districtLgCode, blockLgCode, languageId]
+            params
         );
 
         // Fetch advisories
@@ -66,10 +123,9 @@ export const getAdvisories = async (req, res) => {
             LEFT JOIN imd_advisory_type at
                 ON d.advisory_type_id = at.imd_advisory_type_id
 
-            WHERE d.state_lg_code = ?
-              AND d.district_lg_code = ?
-              AND d.block_lg_code = ?
-              AND d.language_id = ?
+            WHERE 
+                ${whereSql} 
+                ${searchSql}
 
             ORDER BY m.advisory_date DESC, d.id DESC
 
@@ -77,12 +133,9 @@ export const getAdvisories = async (req, res) => {
             OFFSET ?
             `,
             [
-                stateLgCode,
-                districtLgCode,
-                blockLgCode,
-                languageId,
+                ...params,
                 pageSize,
-                offset,
+                offset
             ]
         );
 
