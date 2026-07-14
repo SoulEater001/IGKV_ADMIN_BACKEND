@@ -151,7 +151,7 @@ export const createCategory = async (req, res) => {
         await connection.rollback();
         return res.status(500).json({
             success: false,
-            message: "Failed to create category."
+            message: error.message || "Failed to create category."
         });
 
     } finally { connection.release(); }
@@ -351,7 +351,7 @@ export const deleteCategory = async (req, res) => {
 
             return res.status(200).json({
                 success: true,
-                message: "Category deleted successfully."
+                message: error.message||"Category deleted successfully."
             });
         }
     } catch (error) {
