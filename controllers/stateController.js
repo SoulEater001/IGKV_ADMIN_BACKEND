@@ -6,14 +6,31 @@ import { ENTITIES } from "../constant/activityEntities.js";
 export const getStates = async (req, res) => {
     try {
         const [rows] = await pool.query(`
-            SELECT
-                state_id,
-                name,
-                state_lg_code,
-                create_datetime
-            FROM m_state
-            WHERE deleted IS NULL
-            ORDER BY name ASC
+           SELECT
+                s.state_id,
+                s.state_lg_code,
+                s.create_datetime,
+                s.name As name,
+
+                en.name AS name_en,
+                hi.name AS name_hi
+
+            FROM m_state s
+
+            LEFT JOIN m_state_language en
+                ON en.state_id = s.state_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
+
+            LEFT JOIN m_state_language hi
+                ON hi.state_id = s.state_id
+               AND hi.language_id = 1
+               AND hi.deleted IS NULL
+
+            WHERE s.deleted IS NULL
+
+            ORDER BY en.name ASC
+
         `);
 
         return res.status(200).json({
@@ -38,14 +55,29 @@ export const getStateById = async (req, res) => {
 
         const [[state]] = await pool.query(
             `
-            SELECT
-                state_id,
-                state_lg_code,
-                name,
-                create_datetime
-            FROM m_state
-            WHERE state_id = ?
-              AND (deleted IS NULL OR deleted = 'N')
+             SELECT
+                s.state_id,
+                s.state_lg_code,
+                s.create_datetime,
+
+                en.name AS name_en,
+                hi.name AS name_hi
+
+            FROM m_state s
+
+            LEFT JOIN m_state_language en
+                ON en.state_id = s.state_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
+
+            LEFT JOIN m_state_language hi
+                ON hi.state_id = s.state_id
+               AND hi.language_id = 1
+               AND hi.deleted IS NULL
+
+            WHERE
+                s.state_id = ?
+                AND s.deleted IS NULL
             `,
             [id]
         );
@@ -75,21 +107,24 @@ export const getStateById = async (req, res) => {
 };
 
 export const createState = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const {
-            name,
+            name_en,
+            name_hi,
             state_lg_code
         } = req.body;
 
-        if (!name?.trim() || !state_lg_code) {
+        if (!name_en?.trim() || !name_hi?.trim() || !state_lg_code) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
-                message: "State name and LG code are required."
+                message: "English and hindi name and LG code are required."
             });
         }
 
-        const [[existing]] = await pool.query(
+        const [[existing]] = await connection.query(
             `
             SELECT state_id
             FROM m_state
@@ -100,39 +135,69 @@ export const createState = async (req, res) => {
             AND (deleted IS NULL OR deleted = 'N')
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 state_lg_code
             ]
         );
 
         if (existing) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "State already exists."
             });
         }
 
-        const [result] = await pool.query(
+        const [result] = await connection.query(
             `
             INSERT INTO m_state
             (
                 name,
-                state_lg_code
+                state_lg_code,
+                create_by
             )
-            VALUES (?, ?)
+            VALUES (?, ?, ?)
             `,
             [
-                name.trim(),
-                state_lg_code
+                name_en.trim(),
+                state_lg_code,
+                req.user.id
             ]
         );
+        const stateId = result.insertId;
+
+        await connection.query(
+            `
+            INSERT INTO m_state_language
+            (
+                state_id,
+                language_id,
+                name,
+                create_by
+            )
+            VALUES
+                (?, 2, ?, ?),
+                (?, 1, ?, ?)
+            `,
+            [
+                stateId,
+                name_en.trim(),
+                req.user.id,
+
+                stateId,
+                name_hi.trim(),
+                req.user.id
+            ]
+        );
+
+        await connection.commit();
 
         await logActivity({
             userId: req.user.id,
             action: ACTIONS.CREATE,
             entity: ENTITIES.STATE,
-            entityId: result.insertId,
-            description: `${req.user.name} created state ${name.trim()}`,
+            entityId: stateId,
+            description: `${req.user.name} created state ${name_en.trim()}`,
             ipAddress: req.ip
         });
 
@@ -144,12 +209,14 @@ export const createState = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to create state."
         });
 
+    } finally {
+        connection.release();
     }
 };
 
@@ -163,17 +230,18 @@ export const updateState = async (req, res) => {
         const { id } = req.params;
 
         const {
-            name,
+            name_en,
+            name_hi,
             state_lg_code
         } = req.body;
 
-        if (!name?.trim() || !state_lg_code) {
+        if (!name_en?.trim() || !name_hi?.trim() || !state_lg_code) {
 
             await connection.rollback();
 
             return res.status(400).json({
                 success: false,
-                message: "State name and LG code are required."
+                message: "English name, Hindi name and LG code are required."
             });
 
         }
@@ -214,7 +282,7 @@ export const updateState = async (req, res) => {
                 AND (deleted IS NULL OR deleted = 'N')
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 state_lg_code,
                 id
             ]
@@ -238,12 +306,51 @@ export const updateState = async (req, res) => {
             UPDATE m_state
             SET
                 name = ?,
-                state_lg_code = ?
+                state_lg_code = ?,
+                modify_by = ?
             WHERE state_id = ?
             `,
+
             [
-                name.trim(),
+                name_en.trim(),
                 state_lg_code,
+                req.user.id,
+                id
+            ]
+        );
+
+        await connection.query(
+            `
+    UPDATE m_state_language
+    SET
+        name = ?,
+        modify_by = ?
+    WHERE
+        state_id = ?
+        AND language_id = 2
+        AND deleted IS NULL
+    `,
+            [
+                name_en.trim(),
+                req.user.id,
+                id
+            ]
+        );
+
+        await connection.query(
+            `
+    UPDATE m_state_language
+    SET
+        name = ?,
+        modify_by = ?
+    WHERE
+        state_id = ?
+        AND language_id = 1
+        AND deleted IS NULL
+    `,
+            [
+                name_hi.trim(),
+                req.user.id,
                 id
             ]
         );
@@ -280,8 +387,8 @@ export const updateState = async (req, res) => {
 
         const description =
             oldLgCode === state_lg_code
-                ? `${req.user.name} updated state ${name.trim()}`
-                : `${req.user.name} updated state ${name.trim()} and changed its LG code`;
+                ? `${req.user.name} updated state ${name_en.trim()}`
+                : `${req.user.name} updated state ${name_en.trim()} and changed its LG code`;
 
         await logActivity({
             userId: req.user.id,
@@ -316,8 +423,9 @@ export const updateState = async (req, res) => {
 };
 
 export const deleteState = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const { id } = req.params;
 
         const [[state]] = await pool.query(
@@ -333,6 +441,7 @@ export const deleteState = async (req, res) => {
         );
 
         if (!state) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "State not found."
@@ -352,6 +461,7 @@ export const deleteState = async (req, res) => {
         );
 
         if (districtUsage.total > 0) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete state because it contains districts."
@@ -368,6 +478,7 @@ export const deleteState = async (req, res) => {
         );
 
         if (mainUsage.total > 0) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete state because it is used in advisory main."
@@ -384,6 +495,7 @@ export const deleteState = async (req, res) => {
         );
 
         if (detailUsage.total > 0) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete state because it is used in advisory details."
@@ -395,11 +507,31 @@ export const deleteState = async (req, res) => {
             UPDATE m_state
             SET
                 deleted='Y',
-                delete_datetime=NOW()
+                delete_datetime=NOW(),
+                delete_by = ?
             WHERE state_id=?
             `,
-            [id]
+            [req.user.id, id]
         );
+
+        await connection.query(
+            `
+        UPDATE m_state_language
+        SET
+            deleted = 'Y',
+            delete_datetime = NOW(),
+            delete_by = ?
+        WHERE
+            state_id = ?
+            AND deleted IS NULL
+        `,
+            [
+                req.user.id,
+                id
+            ]
+        );
+
+        await connection.commit();
 
         await logActivity({
             userId: req.user.id,
@@ -418,11 +550,13 @@ export const deleteState = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to delete state."
         });
 
+    } finally {
+        connection.release();
     }
 };
