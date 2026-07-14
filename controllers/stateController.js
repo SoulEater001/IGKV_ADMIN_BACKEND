@@ -4,9 +4,9 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { requiresApproval } from "../utils/approval.js";
-import { executeCreateState , executeDeleteState} from "../services/stateService.js";
+import { executeCreateState, executeDeleteState } from "../services/stateService.js";
 
-export const getStates = async (req, res) => {
+export const getStateMaster = async (req, res) => {
     try {
         const [rows] = await pool.query(`
            SELECT
@@ -48,6 +48,129 @@ export const getStates = async (req, res) => {
             success: false,
             message: "Failed to fetch states.",
         });
+    }
+};
+
+export const getStates = async (req, res) => {
+    try {
+
+        const {
+            page = 1,
+            limit = 10,
+            search = ""
+        } = req.query;
+        console.log(search)
+
+        const pageNumber = Number(page);
+        const pageSize = Number(limit);
+        const offset = (pageNumber - 1) * pageSize;
+
+        const where = [
+            "s.deleted IS NULL"
+        ];
+
+        const params = [];
+
+        if (search.trim()) {
+
+            where.push(`
+                (
+                    CAST(s.state_id AS CHAR) LIKE ?
+                    OR CAST(s.state_lg_code AS CHAR) LIKE ?
+                    OR LOWER(en.name) LIKE LOWER(?)
+                    OR LOWER(hi.name) LIKE LOWER(?)
+                )
+            `);
+
+            const keyword = `%${search.trim()}%`;
+
+            params.push(
+                keyword,
+                keyword,
+                keyword,
+                keyword
+            );
+
+        }
+
+        const whereSql = where.join("\nAND ");
+
+        const [[countResult]] = await pool.query(
+            `
+            SELECT COUNT(*) AS total
+
+            FROM m_state s
+
+            LEFT JOIN m_state_language en
+                ON en.state_id = s.state_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
+
+            LEFT JOIN m_state_language hi
+                ON hi.state_id = s.state_id
+               AND hi.language_id = 1
+               AND hi.deleted IS NULL
+
+            WHERE ${whereSql}
+            `,
+            params
+        );
+
+        const [rows] = await pool.query(
+            `
+            SELECT
+                s.state_id,
+                s.state_lg_code,
+                s.create_datetime,
+                s.name,
+
+                en.name AS name_en,
+                hi.name AS name_hi
+
+            FROM m_state s
+
+            LEFT JOIN m_state_language en
+                ON en.state_id = s.state_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
+
+            LEFT JOIN m_state_language hi
+                ON hi.state_id = s.state_id
+               AND hi.language_id = 1
+               AND hi.deleted IS NULL
+
+            WHERE ${whereSql}
+
+            ORDER BY en.name ASC
+
+            LIMIT ?
+            OFFSET ?
+            `,
+            [
+                ...params,
+                pageSize,
+                offset
+            ]
+        );
+
+        return res.status(200).json({
+            success: true,
+            page: pageNumber,
+            limit: pageSize,
+            total: countResult.total,
+            totalPages: Math.ceil(countResult.total / pageSize),
+            data: rows
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch states."
+        });
+
     }
 };
 
