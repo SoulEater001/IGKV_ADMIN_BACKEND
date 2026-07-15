@@ -8,20 +8,57 @@ import { executeDeleteCrop, executeCreateCrop } from "../services/cropService.js
 
 export const getCropsPaginated = async (req, res) => {
     try {
-        const { page, limit = 10 } = req.query;
+        const {
+            page = 1,
+            limit = 10,
+            search = ""
+        } = req.query;
 
         const pageNumber = Number(page);
         const pageSize = Number(limit);
         const offset = (pageNumber - 1) * pageSize;
+        let where = `WHERE 1 = 1`;
+
+        const params = [];
+
+        if (search.trim()) {
+
+            where += `
+                AND (
+                    LOWER(c.imd_crop_name) LIKE LOWER(?)
+                    OR LOWER(c.imd_crop_name_h) LIKE LOWER(?)
+                    OR LOWER(mc.img_category_name) LIKE LOWER(?)
+                    OR CAST(c.id AS CHAR) LIKE ?
+                    OR CAST(c.imd_crop_id AS CHAR) LIKE ?
+                )
+            `;
+
+            const keyword = `%${search.trim()}%`;
+
+            params.push(
+                keyword,
+                keyword,
+                keyword,
+                keyword,
+                keyword
+            );
+
+        }
 
         const [[countResult]] = await pool.query(
             `
             SELECT COUNT(*) AS total
-            FROM imd_m_crop
-            `
+
+            FROM imd_m_crop c
+
+            LEFT JOIN imd_m_category mc
+                ON c.imd_category_id = mc.imd_category_id
+
+            ${where}
+            `,
+            params
         );
 
-        // Fetch paginated crops
         const [rows] = await pool.query(
             `
             SELECT
@@ -37,12 +74,16 @@ export const getCropsPaginated = async (req, res) => {
             LEFT JOIN imd_m_category mc
                 ON c.imd_category_id = mc.imd_category_id
 
+            ${where}
+
             ORDER BY c.id ASC
 
             LIMIT ?
+
             OFFSET ?
             `,
             [
+                ...params,
                 pageSize,
                 offset
             ]
