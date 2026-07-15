@@ -47,7 +47,7 @@ export const getDistrictsByZone = async (req, res) => {
     }
 };
 
-export const getDistricts = async (req, res) => {
+export const getDistrictsPaginated = async (req, res) => {
     try {
 
         const {
@@ -192,7 +192,7 @@ ${where}
     }
 };
 
-export const getDistrictOptions = async (req, res) => {
+export const getDistricts = async (req, res) => {
     try {
 
         const [rows] = await pool.query(`

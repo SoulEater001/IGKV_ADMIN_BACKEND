@@ -1,11 +1,11 @@
 import express from "express";
-import { getStates, getStateById, createState, updateState, deleteState, getStateMaster } from "../controllers/stateController.js";
+import { getState, getStateById, createState, updateState, deleteState, getStatesPaginated } from "../controllers/stateController.js";
 import { authenticate } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/master", getStateMaster);
-router.get("/", getStates);
+router.get("/", getState);
+router.get("/paginated", getStatesPaginated);
 
 router.get("/:id", getStateById);
 

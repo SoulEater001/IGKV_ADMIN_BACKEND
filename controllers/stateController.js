@@ -6,7 +6,7 @@ import { createApprovalRequest, hasPendingApproval } from "../services/approvalS
 import { requiresApproval } from "../utils/approval.js";
 import { executeCreateState, executeDeleteState } from "../services/stateService.js";
 
-export const getStateMaster = async (req, res) => {
+export const getState = async (req, res) => {
     try {
         const [rows] = await pool.query(`
            SELECT
@@ -51,7 +51,7 @@ export const getStateMaster = async (req, res) => {
     }
 };
 
-export const getStates = async (req, res) => {
+export const getStatesPaginated = async (req, res) => {
     try {
 
         const {

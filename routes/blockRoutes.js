@@ -1,12 +1,12 @@
 import express from "express";
-import { getBlocksByDistrict, getBlockById, getBlocks, updateBlock, createBlock, deleteBlock } from "../controllers/blockController.js";
+import { getBlocksByDistrict, getBlockById, getBlocksPaginated, updateBlock, createBlock, deleteBlock } from "../controllers/blockController.js";
 import { authenticate } from '../middleware/authMiddleware.js'
 
 const router = express.Router();
 
 router.get("/by-district", getBlocksByDistrict);
 
-router.get("/", getBlocks);
+router.get("/paginated", getBlocksPaginated);
 
 router.get("/:id", getBlockById);
 

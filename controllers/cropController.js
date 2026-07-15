@@ -6,7 +6,7 @@ import { requiresApproval } from '../utils/approval.js'
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
 import { executeDeleteCrop, executeCreateCrop } from "../services/cropService.js";
 
-export const getCrops = async (req, res) => {
+export const getCropsPaginated = async (req, res) => {
     try {
         const { page, limit = 10 } = req.query;
 

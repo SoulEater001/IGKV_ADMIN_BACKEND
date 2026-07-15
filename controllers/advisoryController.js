@@ -6,7 +6,7 @@ import { hasPendingApproval, createApprovalRequest } from '../services/approvalS
 import { requiresApproval } from '../utils/approval.js'
 import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType } from "../services/advisoryService.js";
 
-export const getAdvisories = async (req, res) => {
+export const getAdvisoriesPaginated = async (req, res) => {
     try {
         const {
             stateLgCode,

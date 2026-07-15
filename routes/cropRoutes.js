@@ -1,11 +1,11 @@
 import express from "express";
-import { getCrops, updateCrop, deleteCrop, createCrop } from "../controllers/cropController.js";
+import { updateCrop, deleteCrop, createCrop, getCropsPaginated } from "../controllers/cropController.js";
 import { authenticate } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 
-router.get("/", getCrops);
+router.get("/paginated", getCropsPaginated);
 
 router.post("/create", authenticate, createCrop);
 

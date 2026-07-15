@@ -47,7 +47,7 @@ export const getBlocksByDistrict = async (req, res) => {
     }
 };
 
-export const getBlocks = async (req, res) => {
+export const getBlocksPaginated = async (req, res) => {
     try {
 
         const {

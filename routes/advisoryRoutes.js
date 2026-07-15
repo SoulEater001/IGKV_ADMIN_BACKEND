@@ -1,5 +1,5 @@
 import express from 'express'
-import { createAdvisory, getAdvisories, getAdvisoryTypes, createAdvisoryType, updateAdvisoryType, deleteAdvisoryType } from '../controllers/advisoryController.js';
+import { createAdvisory, getAdvisoriesPaginated, getAdvisoryTypes, createAdvisoryType, updateAdvisoryType, deleteAdvisoryType } from '../controllers/advisoryController.js';
 import { updateAdvisory, deleteAdvisory } from '../controllers/advisoryController.js';
 import {authenticate} from '../middleware/authMiddleware.js'
 
@@ -12,7 +12,7 @@ router.put("/types/:id",authenticate, updateAdvisoryType);
 router.delete("/types/:id",authenticate, deleteAdvisoryType);
 
 
-router.get("/",authenticate, getAdvisories);
+router.get("/paginated",authenticate, getAdvisoriesPaginated);
 router.put("/:id",authenticate, updateAdvisory);
 router.post("/create",authenticate, createAdvisory);
 router.delete("/:id", authenticate, deleteAdvisory);
