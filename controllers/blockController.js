@@ -75,7 +75,8 @@ export const getBlocksPaginated = async (req, res) => {
 
             where += `
                 AND (
-                    LOWER(en.name) LIKE LOWER(?)
+                 CAST(b.block_id AS CHAR) LIKE ?
+                    OR LOWER(en.name) LIKE LOWER(?)
                     OR LOWER(b.name) LIKE LOWER(?)
                     OR LOWER(d.name) LIKE LOWER(?)
                     OR CAST(b.block_lg_code AS CHAR) LIKE ?
@@ -85,6 +86,7 @@ export const getBlocksPaginated = async (req, res) => {
             const keyword = `%${search.toLowerCase()}%`;
 
             params.push(
+                keyword,
                 keyword,
                 keyword,
                 keyword,
