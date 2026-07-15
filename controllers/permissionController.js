@@ -57,6 +57,27 @@ export const createPermission = async (req, res) => {
             });
         }
 
+        const normalizedResource = resource.trim();
+        const normalizedAction = action.trim();
+
+        if (!PERMISSION_RESOURCES.includes(normalizedResource)) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid permission resource."
+            });
+        }
+
+        if (!PERMISSION_ACTIONS.includes(normalizedAction)) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid permission action."
+            });
+        }
+
         const [[existing]] = await connection.query(
             `
             SELECT id

@@ -1,8 +1,9 @@
 import jwt from "jsonwebtoken";
 import { pool } from "../config/db.js";
 
-export const authenticate = async(req, res, next) => {
+export const authenticate = async (req, res, next) => {
     try {
+
         const authHeader = req.headers.authorization;
 
         if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -14,23 +15,42 @@ export const authenticate = async(req, res, next) => {
 
         const token = authHeader.split(" ")[1];
 
-        const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+        const decoded = jwt.verify(
+            token,
+            process.env.JWT_ACCESS_SECRET
+        );
 
-        const [[user]] = await pool.query(
+        const [userRows] = await pool.query(
             `
-                SELECT token_version
-                FROM admin_users
-                WHERE id = ?
+            SELECT
+                u.id,
+                u.name,
+                u.email,
+                u.token_version,
+
+                r.name AS role
+
+            FROM admin_users u
+
+            LEFT JOIN user_roles ur
+                ON u.id = ur.user_id
+
+            LEFT JOIN roles r
+                ON ur.role_id = r.id
+
+            WHERE u.id = ?
             `,
             [decoded.id]
         );
 
-        if (!user) {
+        if (userRows.length === 0) {
             return res.status(401).json({
                 success: false,
                 message: "User not found."
             });
         }
+
+        const user = userRows[0];
 
         if (user.token_version !== decoded.tokenVersion) {
             return res.status(401).json({
@@ -39,14 +59,50 @@ export const authenticate = async(req, res, next) => {
             });
         }
 
-        req.user = decoded;
+        const roles = userRows
+            .map(row => row.role)
+            .filter(Boolean);
+
+        const [permissions] = await pool.query(
+            `
+            SELECT DISTINCT
+                p.resource,
+                p.action
+
+            FROM user_roles ur
+
+            JOIN role_permissions rp
+                ON ur.role_id = rp.role_id
+
+            JOIN permissions p
+                ON rp.permission_id = p.id
+
+            WHERE ur.user_id = ?
+            `,
+            [decoded.id]
+        );
+
+        const permissionNames = permissions.map(
+            permission => `${permission.resource}:${permission.action}`
+        );
+
+        req.user = {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            roles,
+            permissions: permissionNames
+        };
 
         next();
+
     } catch (error) {
+
         return res.status(401).json({
             success: false,
             message: "Invalid or expired token."
         });
+
     }
 };
 
@@ -72,26 +128,7 @@ export const authorizePermissions = (resource, action) => {
     return async (req, res, next) => {
         try {
 
-            const [permissions] = await pool.query(
-                `
-                SELECT
-                    p.resource,
-                    p.action
-
-                FROM user_roles ur
-
-                JOIN role_permissions rp
-                    ON ur.role_id = rp.role_id
-
-                JOIN permissions p
-                    ON rp.permission_id = p.id
-
-                WHERE ur.user_id = ?
-                `,
-                [req.user.id]
-            );
-
-            const hasPermission = permissions.some(
+            const hasPermission = req.user.permissions.some(
                 permission =>
                     permission.resource === resource &&
                     permission.action === action
