@@ -4,7 +4,8 @@ import {
     createPermission,
     updatePermission,
     deletePermission,
-    getPermissionOptions
+    getPermissionOptions,
+    getPermissionsPaginated
 } from "../controllers/permissionController.js";
 import { authenticate , authorize} from "../middleware/authMiddleware.js";
 import { ROLES } from '../constant/index.js';
@@ -12,6 +13,8 @@ import { ROLES } from '../constant/index.js';
 const router = express.Router();
 
 router.get("/", authenticate, getPermissions);
+
+router.get("/paginated", authenticate, getPermissionsPaginated);
 
 router.post("/create", authenticate,authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), createPermission);
 

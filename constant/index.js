@@ -21,7 +21,8 @@ export const PERMISSION_RESOURCES = [
 
 export const ROLES = {
     ADMIN : "ADMIN",
-    SUPER_ADMIN : "SUPER_ADMIN"
+    SUPER_ADMIN : "SUPER_ADMIN",
+    TEST : "TEST"
 }
 
 export const APPROVAL_STATUS = {

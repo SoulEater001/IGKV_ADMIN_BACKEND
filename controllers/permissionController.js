@@ -37,6 +37,89 @@ export const getPermissions = async (req, res) => {
     }
 };
 
+export const getPermissionsPaginated = async (req, res) => {
+    try {
+
+        const {
+            page = 1,
+            limit = 10,
+            search = ""
+        } = req.query;
+
+        const pageNumber = Number(page);
+        const pageSize = Number(limit);
+        const offset = (pageNumber - 1) * pageSize;
+
+        let where = "";
+        const params = [];
+
+        if (search.trim()) {
+
+            where = `
+                WHERE
+                    LOWER(resource) LIKE LOWER(?)
+                    OR LOWER(action) LIKE LOWER(?)
+            `;
+
+            const keyword = `%${search.trim()}%`;
+
+            params.push(keyword, keyword);
+
+        }
+
+        const [[countResult]] = await pool.query(
+            `
+            SELECT COUNT(*) AS total
+            FROM permissions
+            ${where}
+            `,
+            params
+        );
+
+        const [rows] = await pool.query(
+            `
+            SELECT
+                id,
+                resource,
+                action
+
+            FROM permissions
+
+            ${where}
+
+            ORDER BY resource ASC, action ASC
+
+            LIMIT ?
+            OFFSET ?
+            `,
+            [
+                ...params,
+                pageSize,
+                offset
+            ]
+        );
+
+        return res.status(200).json({
+            success: true,
+            page: pageNumber,
+            limit: pageSize,
+            total: countResult.total,
+            totalPages: Math.ceil(countResult.total / pageSize),
+            data: rows
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch permissions."
+        });
+
+    }
+};
+
 export const createPermission = async (req, res) => {
     const connection = await pool.getConnection();
     try {

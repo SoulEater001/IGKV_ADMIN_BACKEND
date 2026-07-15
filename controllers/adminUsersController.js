@@ -7,7 +7,7 @@ import { createApprovalRequest, hasPendingApproval } from "../services/approvalS
 import { executeCreateUser, executeDeleteUser } from "../services/adminUserService.js";
 import { ROLES } from "../constant/index.js";
 import { requiresApproval, canManageRole } from "../utils/approval.js";
-import {invalidateUserTokens} from '../utils/token.js'
+import { invalidateUserTokens } from '../utils/token.js'
 
 export const getUsers = async (req, res) => {
     try {
@@ -21,7 +21,11 @@ export const getUsers = async (req, res) => {
                  u.created_at,
                  u.updated_at,
 
-                MIN(r.id) AS role_id,
+                GROUP_CONCAT(
+                    DISTINCT r.id
+                    ORDER BY r.id
+                    SEPARATOR ','
+                ) AS role_ids,
 
            GROUP_CONCAT(
                DISTINCT r.name
@@ -49,6 +53,9 @@ export const getUsers = async (req, res) => {
         `);
         const users = rows.map(user => ({
             ...user,
+            role_ids: user.role_ids
+                ? user.role_ids.split(",").map(Number)
+                : [],
             roles: user.roles
                 ? user.roles.split(",")
                 : []
@@ -83,7 +90,7 @@ export const createUser = async (req, res) => {
             name,
             email,
             password,
-            role_id,
+            role_ids,
             is_active = true
         } = req.body;
 
@@ -91,7 +98,8 @@ export const createUser = async (req, res) => {
             !name?.trim() ||
             !email?.trim() ||
             !password?.trim() ||
-            !role_id
+            !Array.isArray(role_ids) ||
+            role_ids.length === 0
         ) {
             return res.status(400).json({
                 success: false,
@@ -115,30 +123,36 @@ export const createUser = async (req, res) => {
             });
         }
 
-        const [[role]] = await connection.query(
+        const [roles] = await connection.query(
             `
             SELECT id, name
             FROM roles
-            WHERE id = ?
-            `,
-            [role_id]
+            WHERE id IN (?)
+        `,
+            [role_ids]
         );
 
-        if (!role) {
+        if (roles.length !== role_ids.length) {
             await connection.rollback();
             return res.status(404).json({
                 success: false,
-                message: "Role not found."
+                message: "Roles not found."
             });
         }
 
-        if (!canManageRole(req.user, role.name)) {
-            await connection.rollback();
+        for (const role of roles) {
 
-            return res.status(403).json({
-                success: false,
-                message: `You are not allowed to create users with the ${role.name} role.`
-            });
+            if (!canManageRole(req.user, role.name)) {
+
+                await connection.rollback();
+
+                return res.status(403).json({
+                    success: false,
+                    message: `You are not allowed to assign ${role.name}.`
+                });
+
+            }
+
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -147,7 +161,7 @@ export const createUser = async (req, res) => {
             name: name.trim(),
             email: email.trim(),
             password: hashedPassword,
-            role_id,
+            role_ids,
             is_active
         };
 
@@ -246,24 +260,32 @@ export const updateUser = async (req, res) => {
             name,
             email,
             password,
-            role_id,
+            role_ids,
             is_active
         } = req.body;
+
+        if (
+            !name?.trim() ||
+            !email?.trim() ||
+            !Array.isArray(role_ids) ||
+            role_ids.length === 0
+        ) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Name, email and at least one role are required."
+            });
+        }
 
         const [[user]] = await connection.query(
             `
     SELECT
-        u.id,
-        u.name,
-        u.is_active,
-        ur.role_id
-
-    FROM admin_users u
-
-    LEFT JOIN user_roles ur
-        ON u.id = ur.user_id
-
-    WHERE u.id = ?
+    id,
+    name,
+    is_active
+FROM admin_users
+WHERE id = ?
     `,
             [id]
         );
@@ -276,6 +298,19 @@ export const updateUser = async (req, res) => {
                 message: "User not found."
             });
         }
+
+        const [existingRoles] = await connection.query(
+            `
+    SELECT role_id
+    FROM user_roles
+    WHERE user_id = ?
+    `,
+            [id]
+        );
+
+        const currentRoleIds = existingRoles
+            .map(r => Number(r.role_id))
+            .sort((a, b) => a - b);
 
         const [[emailUser]] = await connection.query(
             `
@@ -300,16 +335,16 @@ export const updateUser = async (req, res) => {
             });
         }
 
-        const [[role]] = await connection.query(
+        const [roles] = await connection.query(
             `
-            SELECT id
-            FROM roles
-            WHERE id = ?
-            `,
-            [role_id]
+    SELECT id,name
+    FROM roles
+    WHERE id IN (?)
+    `,
+            [role_ids]
         );
 
-        if (!role) {
+        if (roles.length !== role_ids.length) {
 
             await connection.rollback();
 
@@ -317,6 +352,21 @@ export const updateUser = async (req, res) => {
                 success: false,
                 message: "Role not found."
             });
+        }
+
+        for (const role of roles) {
+
+            if (!canManageRole(req.user, role.name)) {
+
+                await connection.rollback();
+
+                return res.status(403).json({
+                    success: false,
+                    message: `You are not allowed to assign ${role.name}.`
+                });
+
+            }
+
         }
 
         let sql = `
@@ -356,6 +406,11 @@ export const updateUser = async (req, res) => {
             [id]
         );
 
+        const values = role_ids.map(roleId => [
+            id,
+            roleId
+        ]);
+
         await connection.query(
             `
             INSERT INTO user_roles
@@ -363,15 +418,21 @@ export const updateUser = async (req, res) => {
                 user_id,
                 role_id
             )
-            VALUES (?, ?)
+            VALUES ?
             `,
-            [
-                id,
-                role_id
-            ]
+            [values]
         );
+
+        const newRoleIds = [...role_ids]
+            .map(Number)
+            .sort((a, b) => a - b);
+
+        const rolesChanged =
+            JSON.stringify(currentRoleIds) !==
+            JSON.stringify(newRoleIds);
+
         const authorizationChanged =
-            user.role_id !== role_id ||
+            rolesChanged ||
             Boolean(user.is_active) !== Boolean(is_active);
 
         if (authorizationChanged) {
@@ -418,7 +479,7 @@ export const deleteUser = async (req, res) => {
 
         const { id } = req.params;
         await connection.beginTransaction();
-        const [[user]] = await connection.query(
+        const [rows] = await connection.query(
             `
             SELECT
                 u.id,
@@ -435,21 +496,40 @@ export const deleteUser = async (req, res) => {
             [id]
         );
 
-        if (!user) {
+        if (!rows.length) {
             await connection.rollback();
+
             return res.status(404).json({
                 success: false,
                 message: "User not found."
             });
         }
 
-        if (!canManageRole(req.user, role.name)) {
-            await connection.rollback();
+        const user = {
+            id: rows[0].id,
+            name: rows[0].name,
+            email: rows[0].email,
+            roles: rows
+                .filter(r => r.role_id)
+                .map(r => ({
+                    id: r.role_id,
+                    name: r.role_name
+                }))
+        };
 
-            return res.status(403).json({
-                success: false,
-                message: `You cannot delete a ${role.name}.`
-            });
+        for (const role of user.roles) {
+
+            if (!canManageRole(req.user, role.name)) {
+
+                await connection.rollback();
+
+                return res.status(403).json({
+                    success: false,
+                    message: `You cannot delete a ${role.name}.`
+                });
+
+            }
+
         }
 
         if (req.user.id == Number(id)) {
@@ -463,7 +543,7 @@ export const deleteUser = async (req, res) => {
             id: user.id,
             name: user.name,
             email: user.email,
-            role: user.role
+            role: user.roles
         };
 
         if (requiresApproval(req.user)) {

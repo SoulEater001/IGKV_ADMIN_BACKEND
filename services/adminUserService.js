@@ -33,19 +33,22 @@ export const executeCreateUser = async (connection, data) => {
         ]
     );
 
+    const userId = result.insertId;
+    const values = data.role_ids.map(roleId => [
+        userId,
+        roleId
+    ]);
+
     await connection.query(
         `
-        INSERT INTO user_roles
-        (
-            user_id,
-            role_id
-        )
-        VALUES (?, ?)
-        `,
-        [
-            result.insertId,
-            data.role_id
-        ]
+    INSERT INTO user_roles
+    (
+        user_id,
+        role_id
+    )
+    VALUES ?
+    `,
+        [values]
     );
 
     return result.insertId;
