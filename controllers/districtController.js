@@ -52,7 +52,8 @@ export const getDistrictsPaginated = async (req, res) => {
 
         const {
             page = 1,
-            limit = 20,
+            limit = 10,
+            search = ''
         } = req.query;
 
         const pageNumber = Number(page);
@@ -61,18 +62,18 @@ export const getDistrictsPaginated = async (req, res) => {
 
         const offset = (pageNumber - 1) * pageSize;
 
-        const search = req.query.search?.trim() || "";
-
-        let where = `WHERE d.deleted IS NULL`;
+        let where = `
+            WHERE d.deleted IS NULL
+        `;
 
         const params = [];
 
-        if (search) {
+        if (search.trim()) {
 
             where += `
                 AND (
                     LOWER(en.name) LIKE LOWER(?)
-                    OR LOWER(hi.name) LIKE ?
+                    OR LOWER(hi.name) LIKE LOWER(?)
                     OR LOWER(d.name) LIKE LOWER(?)
                     OR LOWER(s.name) LIKE LOWER(?)
                     OR LOWER(z.name) LIKE LOWER(?)
@@ -80,7 +81,7 @@ export const getDistrictsPaginated = async (req, res) => {
                 )
             `;
 
-            const keyword = `%${search}%`;
+            const keyword = `%${search.trim()}%`;
 
             params.push(
                 keyword,
@@ -93,34 +94,34 @@ export const getDistrictsPaginated = async (req, res) => {
 
         }
 
-        const [[countResult]] = await pool.query(
+         const [[countResult]] = await pool.query(
             `
             SELECT COUNT(*) AS total
 
-FROM m_district d
+            FROM m_district d
 
-LEFT JOIN m_state s
-    ON d.state_id = s.state_id
+            LEFT JOIN m_state s
+                ON d.state_id = s.state_id
 
-LEFT JOIN m_zone z
-    ON d.zone_id = z.Zone_id
+            LEFT JOIN m_zone z
+                ON d.zone_id = z.zone_id
 
-LEFT JOIN m_district_language en
-    ON en.district_id = d.district_id
-   AND en.language_id = 2
-   AND en.deleted IS NULL
+            LEFT JOIN m_district_language en
+                ON en.district_id = d.district_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
 
-LEFT JOIN m_district_language hi
-    ON hi.district_id = d.district_id
-   AND hi.language_id = 1
-   AND hi.deleted IS NULL
+            LEFT JOIN m_district_language hi
+                ON hi.district_id = d.district_id
+               AND hi.language_id = 1
+               AND hi.deleted IS NULL
 
-${where}
+            ${where}
             `,
             params
         );
 
-        const [rows] = await pool.query(
+       const [rows] = await pool.query(
             `
             SELECT
                 d.district_id,
@@ -141,7 +142,7 @@ ${where}
                 ON d.state_id = s.state_id
 
             LEFT JOIN m_zone z
-                ON d.zone_id = z.Zone_id
+                ON d.zone_id = z.zone_id
 
             LEFT JOIN m_district_language en
                 ON en.district_id = d.district_id
@@ -152,9 +153,10 @@ ${where}
                 ON hi.district_id = d.district_id
                AND hi.language_id = 1
                AND hi.deleted IS NULL
+
             ${where}
 
-            ORDER BY d.name ASC
+            ORDER BY en.name ASC
 
             LIMIT ?
 
@@ -720,7 +722,7 @@ export const deleteDistrict = async (req, res) => {
                 ENTITIES.DISTRICT,
                 ACTIONS.DELETE,
                 {
-                    id : payload.district_id
+                    id: payload.district_id
                 }
             );
 
