@@ -1,7 +1,7 @@
 import "dotenv/config";
 import bcrypt from "bcrypt";
 import { pool } from "../config/db.js";
-
+import { PERMISSION_ACTIONS, PERMISSION_RESOURCES } from "../constant/index.js";
 const ROLES = [
     {
         name: "SUPER_ADMIN",
@@ -13,22 +13,9 @@ const ROLES = [
     }
 ];
 
-const RESOURCES = [
-    "users",
-    "roles",
-    "permissions",
-    "crops",
-    "district",
-    "state",
-    "block"
-];
+const RESOURCES = PERMISSION_RESOURCES;
 
-const ACTIONS = [
-    "create",
-    "read",
-    "update",
-    "delete"
-];
+const ACTIONS = PERMISSION_ACTIONS
 
 const PERMISSIONS = RESOURCES.flatMap(resource =>
     ACTIONS.map(action => ({ resource, action }))
