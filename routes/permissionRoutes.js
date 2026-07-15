@@ -15,7 +15,7 @@ router.get("/", authenticate, getPermissions);
 
 router.post("/create", authenticate,authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), createPermission);
 
-router.put("/:id", authenticate,authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), updatePermission);
+// router.put("/:id", authenticate,authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), updatePermission);
 
 router.delete("/:id", authenticate,authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), deletePermission);
 

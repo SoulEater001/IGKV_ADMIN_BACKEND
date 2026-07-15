@@ -6,6 +6,7 @@ import { createApprovalRequest, hasPendingApproval } from "../services/approvalS
 import { ROLES } from "../constant/index.js";
 import { executeCreateRole, executeDeleteRole } from '../services/roleService.js'
 import {requiresApproval, canManageRole, isSystemRole} from '../utils/approval.js'
+import {invalidateRoleUsers, invalidateUserTokens} from '../utils/token.js'
 
 export const getRoles = async (req, res) => {
     try {
@@ -520,6 +521,7 @@ export const updateRolePermissions = async (req, res) => {
             );
 
         }
+        await invalidateRoleUsers(connection, id);
 
         await connection.commit();
 

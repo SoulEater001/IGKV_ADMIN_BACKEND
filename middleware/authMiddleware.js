@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
+import { pool } from "../config/db.js";
 
-export const authenticate = (req, res, next) => {
+export const authenticate = async(req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
 
@@ -15,6 +16,29 @@ export const authenticate = (req, res, next) => {
 
         const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
 
+        const [[user]] = await pool.query(
+            `
+                SELECT token_version
+                FROM admin_users
+                WHERE id = ?
+            `,
+            [decoded.id]
+        );
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        if (user.token_version !== decoded.tokenVersion) {
+            return res.status(401).json({
+                success: false,
+                message: "Session expired. Please login again."
+            });
+        }
+
         req.user = decoded;
 
         next();
@@ -28,7 +52,12 @@ export const authenticate = (req, res, next) => {
 
 export const authorize = (...roles) => {
     return (req, res, next) => {
-        if (!roles.includes(req.user.role)) {
+
+        const hasRole = req.user.roles.some(role =>
+            roles.includes(role)
+        );
+
+        if (!hasRole) {
             return res.status(403).json({
                 success: false,
                 message: "Forbidden"
@@ -36,5 +65,49 @@ export const authorize = (...roles) => {
         }
 
         next();
+    };
+};
+
+export const authorizePermissions = (resource, action) => {
+    return async (req, res, next) => {
+        try {
+
+            const [permissions] = await pool.query(
+                `
+                SELECT
+                    p.resource,
+                    p.action
+
+                FROM user_roles ur
+
+                JOIN role_permissions rp
+                    ON ur.role_id = rp.role_id
+
+                JOIN permissions p
+                    ON rp.permission_id = p.id
+
+                WHERE ur.user_id = ?
+                `,
+                [req.user.id]
+            );
+
+            const hasPermission = permissions.some(
+                permission =>
+                    permission.resource === resource &&
+                    permission.action === action
+            );
+
+            if (!hasPermission) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Forbidden"
+                });
+            }
+
+            next();
+
+        } catch (error) {
+            next(error);
+        }
     };
 };

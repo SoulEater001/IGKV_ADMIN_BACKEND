@@ -7,6 +7,7 @@ import { createApprovalRequest, hasPendingApproval } from "../services/approvalS
 import { executeCreateUser, executeDeleteUser } from "../services/adminUserService.js";
 import { ROLES } from "../constant/index.js";
 import { requiresApproval, canManageRole } from "../utils/approval.js";
+import {invalidateUserTokens} from '../utils/token.js'
 
 export const getUsers = async (req, res) => {
     try {
@@ -20,8 +21,14 @@ export const getUsers = async (req, res) => {
                  u.created_at,
                  u.updated_at,
 
-                r.id AS role_id,
-                r.name AS role
+                MIN(r.id) AS role_id,
+
+           GROUP_CONCAT(
+               DISTINCT r.name
+                ORDER BY r.name
+                SEPARATOR ','
+            ) AS roles
+
            FROM admin_users u
 
             LEFT JOIN user_roles ur
@@ -30,13 +37,27 @@ export const getUsers = async (req, res) => {
             LEFT JOIN roles r
                  ON ur.role_id = r.id
 
+                 GROUP BY
+                    u.id,
+                    u.name,
+                    u.email,
+                    u.is_active,
+                    u.created_at,
+                    u.updated_at
+
             ORDER BY u.id ASC;
         `);
+        const users = rows.map(user => ({
+            ...user,
+            roles: user.roles
+                ? user.roles.split(",")
+                : []
+        }));
 
         return res.status(200).json({
             success: true,
-            data: rows,
-            count: rows.length
+            data: users,
+            count: users.length
         });
 
     } catch (error) {
@@ -231,10 +252,19 @@ export const updateUser = async (req, res) => {
 
         const [[user]] = await connection.query(
             `
-            SELECT id, name
-            FROM admin_users
-            WHERE id = ?
-            `,
+    SELECT
+        u.id,
+        u.name,
+        u.is_active,
+        ur.role_id
+
+    FROM admin_users u
+
+    LEFT JOIN user_roles ur
+        ON u.id = ur.user_id
+
+    WHERE u.id = ?
+    `,
             [id]
         );
 
@@ -340,6 +370,13 @@ export const updateUser = async (req, res) => {
                 role_id
             ]
         );
+        const authorizationChanged =
+            user.role_id !== role_id ||
+            Boolean(user.is_active) !== Boolean(is_active);
+
+        if (authorizationChanged) {
+            await invalidateUserTokens(connection, id);
+        }
 
         await connection.commit();
 

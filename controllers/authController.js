@@ -96,7 +96,7 @@ export const login = async (req, res) => {
 
         const [roleRows] = await pool.query(
             `
-    SELECT r.name AS role
+    SELECT r.name
     FROM user_roles ur
     JOIN roles r
         ON ur.role_id = r.id
@@ -105,13 +105,41 @@ export const login = async (req, res) => {
             [user.id]
         );
 
-        const role = roleRows[0]?.role;
+        const roles = roleRows.map(role => role.name);
+
+        const [permissionRows] = await pool.query(
+            `
+    SELECT
+        p.resource,
+        p.action
+
+    FROM user_roles ur
+
+    JOIN role_permissions rp
+        ON ur.role_id = rp.role_id
+
+    JOIN permissions p
+        ON rp.permission_id = p.id
+
+    WHERE ur.user_id = ?
+    `,
+            [user.id]
+        );
+        const permissions = [
+            ...new Set(
+                permissionRows.map(
+                    permission => `${permission.resource}:${permission.action}`
+                )
+            )
+        ];
 
         const payload = {
             id: user.id,
             name: user.name,
             email: user.email,
-            role,
+            roles,
+            permissions,
+            tokenVersion: user.token_version
         };
 
         const accessToken = generateAccessToken(payload);
@@ -122,7 +150,9 @@ export const login = async (req, res) => {
             id: user.id,
             name: user.name,
             email: user.email,
-            role,
+            roles,
+            permissions,
+            tokenVersion: user.token_version
         };
 
         await logActivity({

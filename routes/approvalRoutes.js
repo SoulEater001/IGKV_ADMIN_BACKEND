@@ -8,21 +8,21 @@ const router = express.Router();
 router.get(
     "/",
     authenticate,
-    authorize(SYSTEM_ROLES),
+    authorize(...SYSTEM_ROLES),
     getApprovalRequests
 );
 
 router.post(
     "/:id/approve",
     authenticate,
-    authorize(SYSTEM_ROLES),
+    authorize(...SYSTEM_ROLES),
     approveRequest
 );
 
 router.post(
     "/:id/reject",
     authenticate,
-    authorize(SYSTEM_ROLES),
+    authorize(...SYSTEM_ROLES),
     rejectRequest
 );
 
