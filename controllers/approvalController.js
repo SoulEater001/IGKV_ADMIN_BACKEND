@@ -9,7 +9,7 @@ import { executeCreatePermission, executeDeletePermission } from "../services/pe
 import { executeCreateCategory, executeDeleteCategory } from "../services/categoryService.js";
 import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType } from "../services/advisoryService.js";
 import { executeCreateCrop, executeDeleteCrop } from '../services/cropService.js'
-import { executeCreateZone, executeDeleteZone} from "../services/zoneService.js";
+import { executeCreateZone, executeDeleteZone } from "../services/zoneService.js";
 import { executeCreateState, executeDeleteState } from "../services/stateService.js";
 
 export const getApprovalRequests = async (req, res) => {
@@ -247,7 +247,7 @@ export const approveRequest = async (req, res) => {
                 );
 
                 break;
-                
+
             case `${ENTITIES.ZONE}:${ACTIONS.CREATE}`:
 
                 entityId = await executeCreateZone(
@@ -276,6 +276,24 @@ export const approveRequest = async (req, res) => {
             case `${ENTITIES.STATE}:${ACTIONS.DELETE}`:
 
                 entityId = await executeDeleteState(
+                    connection,
+                    payload.id
+                );
+
+                break;
+
+            case `${ENTITIES.DISTRICT}:${ACTIONS.CREATE}`:
+
+                entityId = await executeCreateDistrict(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.DISTRICT}:${ACTIONS.DELETE}`:
+
+                entityId = await executeDeleteDistrict(
                     connection,
                     payload.id
                 );
@@ -345,7 +363,7 @@ export const approveRequest = async (req, res) => {
                     APPROVAL_STATUS.REJECTED,
                     req.user.id,
                     error.message,
-                    remarks??null,
+                    remarks ?? null,
                     request.id
                 ]
             );

@@ -68,9 +68,11 @@ export const getDistricts = async (req, res) => {
 
             where += `
                 AND (
-                    LOWER(d.name) LIKE ?
-                    OR LOWER(s.name) LIKE ?
-                    OR LOWER(z.name) LIKE ?
+                    LOWER(en.name) LIKE LOWER(?)
+                    OR LOWER(hi.name) LIKE ?
+                    OR LOWER(d.name) LIKE LOWER(?)
+                    OR LOWER(s.name) LIKE LOWER(?)
+                    OR LOWER(z.name) LIKE LOWER(?)
                     OR CAST(d.district_lg_code AS CHAR) LIKE ?
                 )
             `;
@@ -78,6 +80,8 @@ export const getDistricts = async (req, res) => {
             const keyword = `%${search}%`;
 
             params.push(
+                keyword,
+                keyword,
                 keyword,
                 keyword,
                 keyword,
@@ -90,15 +94,25 @@ export const getDistricts = async (req, res) => {
             `
             SELECT COUNT(*) AS total
 
-            FROM m_district d
+FROM m_district d
 
-            LEFT JOIN m_state s
-                ON d.state_id = s.state_id
+LEFT JOIN m_state s
+    ON d.state_id = s.state_id
 
-            LEFT JOIN m_zone z
-                ON d.zone_id = z.Zone_id
+LEFT JOIN m_zone z
+    ON d.zone_id = z.Zone_id
 
-            ${where}
+LEFT JOIN m_district_language en
+    ON en.district_id = d.district_id
+   AND en.language_id = 2
+   AND en.deleted IS NULL
+
+LEFT JOIN m_district_language hi
+    ON hi.district_id = d.district_id
+   AND hi.language_id = 1
+   AND hi.deleted IS NULL
+
+${where}
             `,
             params
         );
@@ -113,7 +127,10 @@ export const getDistricts = async (req, res) => {
                 s.name AS state_name,
                 d.zone_id,
                 z.name AS zone_name,
-                d.create_datetime
+                d.create_datetime,
+
+                en.name AS name_en,
+                hi.name AS name_hi
 
             FROM m_district d
 
@@ -123,6 +140,15 @@ export const getDistricts = async (req, res) => {
             LEFT JOIN m_zone z
                 ON d.zone_id = z.Zone_id
 
+            LEFT JOIN m_district_language en
+                ON en.district_id = d.district_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
+
+            LEFT JOIN m_district_language hi
+                ON hi.district_id = d.district_id
+               AND hi.language_id = 1
+               AND hi.deleted IS NULL
             ${where}
 
             ORDER BY d.name ASC
@@ -200,10 +226,39 @@ export const getDistrictById = async (req, res) => {
 
         const [[district]] = await pool.query(
             `
-            SELECT *
-            FROM m_district
-            WHERE district_id = ?
-              AND deleted IS NULL
+             SELECT
+                d.district_id,
+                d.state_id,
+                d.zone_id,
+                d.district_lg_code,
+                d.create_datetime,
+
+                 s.name AS state_name,
+                 z.name as zone_name,
+                en.name AS name_en,
+                hi.name AS name_hi
+
+            FROM m_district d
+
+            LEFT JOIN m_state s
+                ON s.state_id = d.state_id
+
+            LEFT JOIN m_zone z
+                ON z.Zone_id = d.zone_id
+
+            LEFT JOIN m_district_language en
+                ON en.district_id = d.district_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
+
+            LEFT JOIN m_district_language hi
+                ON hi.district_id = d.district_id
+               AND hi.language_id = 1
+               AND hi.deleted IS NULL
+
+            WHERE
+                d.district_id = ?
+                AND d.deleted IS NULL
             `,
             [id]
         );
@@ -233,23 +288,27 @@ export const getDistrictById = async (req, res) => {
 };
 
 export const createDistrict = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const {
-            name,
+            name_en,
+            name_hi,
             state_id,
             zone_id,
             district_lg_code
         } = req.body;
-
+        console.log(req.body)
         if (
-            !name?.trim() ||
+            !name_en?.trim() ||
+            !name_hi?.trim() ||
             !state_id ||
             !district_lg_code
         ) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
-                message: "Name, State, Zone and LG Code are required."
+                message: "English name, Hindi name, State, Zone and LG Code are required."
             });
         }
 
@@ -267,43 +326,77 @@ export const createDistrict = async (req, res) => {
             AND deleted IS NULL
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 district_lg_code
             ]
         );
 
         if (existing) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "District already exists."
             });
         }
 
-        const [result] = await pool.query(
+        const [result] = await connection.query(
             `
             INSERT INTO m_district
             (
                 name,
                 state_id,
                 zone_id,
-                district_lg_code
+                district_lg_code,
+                create_by
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 String(state_id),
                 zone_id,
-                district_lg_code
+                district_lg_code,
+                req.user.id
             ]
         );
+
+        const districtId = result.insertId;
+
+        await connection.query(
+            `
+            INSERT INTO m_district_language
+            (
+                district_id,
+                state_id,
+                language_id,
+                name,
+                create_by
+            )
+            VALUES
+                (?, ?, 2, ?, ?),
+                (?, ?, 1, ?, ?)
+            `,
+            [
+                districtId,
+                state_id,
+                name_en.trim(),
+                req.user.id,
+
+                districtId,
+                state_id,
+                name_hi.trim(),
+                req.user.id
+            ]
+        );
+
+        await connection.commit();
 
         await logActivity({
             userId: req.user.id,
             action: ACTIONS.CREATE,
             entity: ENTITIES.DISTRICT,
-            entityId: result.insertId,
-            description: `${req.user.name} created district ${name.trim()}`,
+            entityId: districtId,
+            description: `${req.user.name} created district ${name_en.trim()}`,
             ipAddress: req.ip
         });
 
@@ -315,12 +408,14 @@ export const createDistrict = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to create district."
         });
 
+    } finally {
+        connection.release();
     }
 };
 
@@ -335,17 +430,35 @@ export const updateDistrict = async (req, res) => {
         const { id } = req.params;
 
         const {
-            name,
+            name_en,
+            name_hi,
             state_id,
             zone_id,
             district_lg_code
         } = req.body;
 
+        if (
+            !name_en?.trim() ||
+            !name_hi?.trim() ||
+            !state_id ||
+            !district_lg_code
+        ) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "English name, Hindi name, State and LG Code are required."
+            });
+        }
+
         const [[district]] = await connection.query(
             `
-            SELECT *
+            SELECT
+                district_id,
+                district_lg_code
             FROM m_district
-            WHERE district_id=?
+            WHERE district_id = ?
+              AND deleted IS NULL
             `,
             [id]
         );
@@ -376,7 +489,7 @@ export const updateDistrict = async (req, res) => {
             AND deleted IS NULL
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 district_lg_code,
                 id
             ]
@@ -402,15 +515,56 @@ export const updateDistrict = async (req, res) => {
                 name=?,
                 state_id=?,
                 zone_id=?,
-                district_lg_code=?
-
+                district_lg_code=?,
+                modify_by = ?
             WHERE district_id=?
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 String(state_id),
                 zone_id,
                 district_lg_code,
+                req.user.id,
+                id
+            ]
+        );
+
+        await connection.query(
+            `
+            UPDATE m_district_language
+            SET
+                state_id = ?,
+                name = ?,
+                modify_by = ?
+            WHERE
+                district_id = ?
+                AND language_id = 2
+                AND deleted IS NULL
+            `,
+            [
+                state_id,
+                name_en.trim(),
+                req.user.id,
+                id
+            ]
+        );
+
+        await connection.query(
+            `
+            UPDATE m_district_language
+            SET
+                state_id = ?,
+                name = ?,
+                modify_by = ?
+            WHERE
+                district_id = ?
+                AND language_id = 1
+                AND deleted IS NULL
+            `,
+            [
+                state_id,
+                name_hi.trim(),
+                req.user.id,
                 id
             ]
         );
@@ -447,8 +601,8 @@ export const updateDistrict = async (req, res) => {
 
         const description =
             oldLgCode === district_lg_code
-                ? `${req.user.name} updated district ${name.trim()}`
-                : `${req.user.name} updated district ${name.trim()} and changed its LG code`;
+                ? `${req.user.name} updated district ${name_en.trim()}`
+                : `${req.user.name} updated district ${name_en.trim()} and changed its LG code`;
 
         await logActivity({
             userId: req.user.id,
@@ -484,11 +638,12 @@ export const updateDistrict = async (req, res) => {
 };
 
 export const deleteDistrict = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction()
         const { id } = req.params;
 
-        const [[district]] = await pool.query(
+        const [[district]] = await connection.query(
             `
             SELECT
                 district_id,
@@ -498,18 +653,20 @@ export const deleteDistrict = async (req, res) => {
             FROM m_district
 
             WHERE district_id=?
+            AND deleted is NULL
             `,
             [id]
         );
 
         if (!district) {
+            await connection.rollback
             return res.status(404).json({
                 success: false,
                 message: "District not found."
             });
         }
 
-        const [[blocks]] = await pool.query(
+        const [[blocks]] = await connection.query(
             `
             SELECT COUNT(*) total
 
@@ -522,13 +679,14 @@ export const deleteDistrict = async (req, res) => {
         );
 
         if (blocks.total > 0) {
+            await connection.rollback
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete district because it contains blocks."
             });
         }
 
-        const [[mainUsage]] = await pool.query(
+        const [[mainUsage]] = await connection.query(
             `
             SELECT COUNT(*) total
 
@@ -540,13 +698,14 @@ export const deleteDistrict = async (req, res) => {
         );
 
         if (mainUsage.total > 0) {
+            await connection.rollback
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete district because it is used in advisories."
             });
         }
 
-        const [[detailUsage]] = await pool.query(
+        const [[detailUsage]] = await connection.query(
             `
             SELECT COUNT(*) total
 
@@ -558,24 +717,45 @@ export const deleteDistrict = async (req, res) => {
         );
 
         if (detailUsage.total > 0) {
+            await connection.rollback
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete district because it is used in advisory details."
             });
         }
 
-        await pool.query(
+        await connection.query(
             `
             UPDATE m_district
 
             SET
                 deleted='Y',
-                delete_datetime=NOW()
+                delete_datetime=NOW(),
+                delete_by = ?
 
             WHERE district_id=?
+                AND deleted is NULL
             `,
-            [id]
+            [req.user.id, id]
         );
+
+        await connection.query(
+            `
+            UPDATE m_district_language
+            SET
+                deleted = 'Y',
+                delete_datetime = NOW(),
+                delete_by = ?
+            WHERE
+                district_id = ?
+                AND deleted IS NULL
+            `,
+            [
+                req.user.id,
+                id
+            ]
+        );
+        await connection.commit();
 
         await logActivity({
             userId: req.user.id,
@@ -594,11 +774,13 @@ export const deleteDistrict = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback
         return res.status(500).json({
             success: false,
             message: "Failed to delete district."
         });
 
+    } finally {
+        connection.release();
     }
 };
