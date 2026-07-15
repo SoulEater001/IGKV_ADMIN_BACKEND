@@ -15,6 +15,7 @@ import rolesRoutes from './routes/rolesRoutes.js';
 import permissionRoutes from './routes/permissionRoutes.js';
 import dashRoutes from './routes/dashRoutes.js';
 import approvalRoutes from './routes/approvalRoutes.js';
+import activityRoutes from './routes/activityRoutes.js';
 
 const PORT = process.env.PORT;
 const app = express();
@@ -41,6 +42,7 @@ app.use("/api/roles", rolesRoutes);
 app.use("/api/permissions", permissionRoutes);
 app.use("/api/dashboard", dashRoutes);
 app.use("/api/approval", approvalRoutes);
+app.use("/api/activity-logs", activityRoutes);
 
 
 
