@@ -4,6 +4,15 @@ export const executeCreateBlock = async (
     userId
 ) => {
 
+    const {
+        name_en,
+        name_hi,
+        district_id,
+        block_lg_code,
+        latitude,
+        longitude
+    } = blockData;
+
     const [[existing]] = await connection.query(
         `
         SELECT block_id
@@ -13,13 +22,14 @@ export const executeCreateBlock = async (
                 LOWER(name) = LOWER(?)
                 OR block_lg_code = ?
             )
-            AND (deleted IS NULL OR deleted = 'N')
+            AND deleted IS NULL
         `,
         [
-            blockData.name,
-            blockData.block_lg_code
+            name_en.trim(),
+            block_lg_code
         ]
     );
+    console.log(existing)
 
     if (existing) {
         throw new Error("Block already exists.");
@@ -39,15 +49,83 @@ export const executeCreateBlock = async (
         VALUES (?, ?, ?, ?, ?, ?)
         `,
         [
-            blockData.name,
-            blockData.district_id,
-            blockData.block_lg_code,
-            blockData.latitude,
-            blockData.longitude,
+            name_en.trim(),
+            district_id,
+            block_lg_code,
+            latitude,
+            longitude,
             userId
         ]
     );
 
-    return result.insertId;
+    const blockId = result.insertId;
+
+    await connection.query(
+        `
+        INSERT INTO m_block_language
+        (
+            block_id,
+            language_id,
+            name,
+            create_by
+        )
+        VALUES
+            (?, 2, ?, ?),
+            (?, 1, ?, ?)
+        `,
+        [
+            blockId,
+            name_en.trim(),
+            userId,
+
+            blockId,
+            name_hi.trim(),
+            userId
+        ]
+    );
+
+    return blockId;
+};
+
+export const executeDeleteBlock = async (
+    connection,
+    blockId,
+    userId
+) => {
+
+    await connection.query(
+        `
+        UPDATE m_block
+        SET
+            deleted = 'Y',
+            delete_by = ?,
+            delete_datetime = NOW()
+        WHERE
+            block_id = ?
+            AND deleted IS NULL
+        `,
+        [
+            userId,
+            blockId
+        ]
+    );
+
+    await connection.query(
+        `
+        UPDATE m_block_language
+        SET
+            deleted = 'Y',
+            delete_by = ?,
+            delete_datetime = NOW()
+        WHERE
+            block_id = ?
+            AND deleted IS NULL
+        `,
+        [
+            userId,
+            blockId
+        ]
+    );
+    return blockId;
 
 };

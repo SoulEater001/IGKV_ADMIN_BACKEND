@@ -12,6 +12,7 @@ import { executeCreateCrop, executeDeleteCrop } from '../services/cropService.js
 import { executeCreateZone, executeDeleteZone } from "../services/zoneService.js";
 import { executeCreateState, executeDeleteState } from "../services/stateService.js";
 import { executeCreateDistrict, executeDeleteDistrict } from "../services/districtService.js";
+import { executeCreateBlock, executeDeleteBlock } from "../services/blockService.js";
 
 export const getApprovalRequests = async (req, res) => {
     try {
@@ -254,7 +255,7 @@ export const approveRequest = async (req, res) => {
                 entityId = await executeCreateZone(
                     connection,
                     payload,
-                    req.user.id
+                    request.requested_by
                 );
 
                 break;
@@ -263,7 +264,7 @@ export const approveRequest = async (req, res) => {
                 entityId = await executeDeleteZone(
                     connection,
                     payload.id,
-                    req.user.id
+                    request.requested_by
                 );
 
                 break;
@@ -273,7 +274,7 @@ export const approveRequest = async (req, res) => {
                 entityId = await executeCreateState(
                     connection,
                     payload,
-                    req.user.id
+                    request.requested_by
                 );
 
                 break;
@@ -282,7 +283,7 @@ export const approveRequest = async (req, res) => {
                 entityId = await executeDeleteState(
                     connection,
                     payload.id,
-                    req.user.id
+                    request.requested_by
                 );
 
                 break;
@@ -292,7 +293,7 @@ export const approveRequest = async (req, res) => {
                 entityId = await executeCreateDistrict(
                     connection,
                     payload,
-                    req.user.id
+                    request.requested_by
                 );
 
                 break;
@@ -302,7 +303,27 @@ export const approveRequest = async (req, res) => {
                 entityId = await executeDeleteDistrict(
                     connection,
                     payload.id,
-                    req.user.id
+                    request.requested_by
+                );
+
+                break;
+
+            case `${ENTITIES.BLOCK}:${ACTIONS.CREATE}`:
+
+                entityId = await executeCreateBlock(
+                    connection,
+                    payload,
+                    request.requested_by
+                );
+
+                break;
+
+            case `${ENTITIES.BLOCK}:${ACTIONS.DELETE}`:
+
+                entityId = await executeDeleteBlock(
+                    connection,
+                    payload.id,
+                    request.requested_by
                 );
 
                 break;
@@ -369,8 +390,7 @@ export const approveRequest = async (req, res) => {
                 [
                     APPROVAL_STATUS.REJECTED,
                     req.user.id,
-                    error.message,
-                    remarks ?? null,
+                     error.message ?? remarks ?? null,
                     request.id
                 ]
             );

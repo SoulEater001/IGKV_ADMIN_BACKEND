@@ -4,6 +4,7 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { requiresApproval } from "../utils/approval.js";
+import { executeCreateBlock ,executeDeleteBlock} from "../services/blockService.js";
 
 export const getBlocksByDistrict = async (req, res) => {
     try {
@@ -264,99 +265,84 @@ export const createBlock = async (req, res) => {
 
         }
 
-        const [[existing]] = await connection.query(
-            `
-            SELECT block_id
+        const blockData = {
+            name_en: name_en.trim(),
+            name_hi: name_hi.trim(),
+            id: district_id,
+            block_lg_code,
+            latitude,
+            longitude
+        };
 
-            FROM m_block
+        if (requiresApproval(req.user)) {
 
-            WHERE (
-                    LOWER(name)=LOWER(?)
-                    OR block_lg_code=?
-                  )
-              AND (
-                    deleted IS NULL
-                    OR deleted='N'
-                  )
-            `,
-            [
-                name_en.trim(),
-                block_lg_code
-            ]
-        );
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.BLOCK,
+                ACTIONS.CREATE,
+                {
+                    name_en: blockData.name_en,
+                    id: blockData.id
+                }
+            );
 
-        if (existing) {
-            await connection.rollback();
-            return res.status(409).json({
-                success: false,
-                message: "Block already exists."
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A block creation request with this name is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.BLOCK,
+                action: ACTIONS.CREATE,
+                payload: blockData,
+                requestedBy: req.user.id
             });
 
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.BLOCK,
+                entityId: req.user.id,
+                description: `${req.user.name} requested creation of block ${blockData.name_en}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Block creation request sent for approval."
+            });
+
+        } else {
+            const blockId = await executeCreateBlock(
+                connection,
+                blockData,
+                req.user.id
+            );
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.BLOCK,
+                entityId: blockId,
+                description: `${req.user.name} created block ${blockData.name_en}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(201).json({
+                success: true,
+                message: "Block created successfully."
+            });
         }
-
-        const [result] = await connection.query(
-            `
-            INSERT INTO m_block
-            (
-                name,
-                district_id,
-                block_lg_code,
-                latitude,
-                longitude,
-                create_by
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            `,
-            [
-                name_en.trim(),
-                district_id,
-                block_lg_code,
-                latitude,
-                longitude,
-                req.user.id
-            ]
-        );
-        const blockId = result.insertId;
-        await connection.query(
-            `
-            INSERT INTO m_block_language
-            (
-                block_id,
-                language_id,
-                name,
-                create_by
-            )
-            VALUES
-                (? , 2, ?, ?),
-                (?, 1, ?, ?)
-            `,
-            [
-                blockId,
-                name_en.trim(),
-                req.user.id,
-
-                blockId,
-                name_hi.trim(),
-                req.user.id
-            ]
-        );
-
-        await connection.commit();
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.CREATE,
-            entity: ENTITIES.BLOCK,
-            entityId: blockId,
-            description: `${req.user.name} created block ${name_en.trim()}`,
-            ipAddress: req.ip
-        });
-
-        return res.status(201).json({
-            success: true,
-            message: "Block created successfully."
-        });
-
     } catch (error) {
 
         console.error(error);
@@ -639,51 +625,77 @@ export const deleteBlock = async (req, res) => {
             });
 
         }
+        const payload = {
+            id: block.block_id,
+            name: block.name
+        }
 
-        await connection.query(
-            `
-            UPDATE m_block
+        if (requiresApproval(req.user)) {
 
-            SET
-                deleted='Y',
-                 delete_by = ?,
-                delete_datetime=NOW()
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.BLOCK,
+                ACTIONS.DELETE,
+                {
+                    id: payload.id
+                }
+            );
 
-            WHERE block_id=?
-                AND deleted IS NULL
-            `,
-            [req.user.id,id]
-        );
+            if (pending) {
 
-        await connection.query(
-            `
-            UPDATE m_block_language
-            SET
-                deleted = 'Y',
-                delete_by = ?,
-                delete_datetime = NOW()
-            WHERE
-                block_id = ?
-                AND deleted IS NULL
-            `,
-            [
-                req.user.id,
-                id
-            ]
-        );
+                await connection.rollback();
 
-        await connection.commit();
+                return res.status(409).json({
+                    success: false,
+                    message: "A block deletion request is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.BLOCK,
+                action: ACTIONS.DELETE,
+                payload,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.BLOCK,
+                entityId: id,
+                description: `${req.user.name} requested deletion of block ${block.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Block deletion request sent for approval."
+            });
+
+        } else {
+            const blockId = await executeDeleteBlock(
+                connection,
+                id,
+                req.user.id
+            );
 
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.DELETE,
-            entity: ENTITIES.BLOCK,
-            entityId: id,
-            description: `${req.user.name} deleted block ${block.name}`,
-            ipAddress: req.ip
-        });
+            await connection.commit();
 
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.BLOCK,
+                entityId: blockId,
+                description: `${req.user.name} deleted block ${block.name}`,
+                ipAddress: req.ip
+            });
+        }
         return res.status(200).json({
             success: true,
             message: "Block deleted successfully."
