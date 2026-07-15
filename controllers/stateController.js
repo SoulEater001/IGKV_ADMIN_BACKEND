@@ -59,7 +59,6 @@ export const getStates = async (req, res) => {
             limit = 10,
             search = ""
         } = req.query;
-        console.log(search)
 
         const pageNumber = Number(page);
         const pageSize = Number(limit);

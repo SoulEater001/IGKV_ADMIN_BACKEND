@@ -11,6 +11,7 @@ import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory
 import { executeCreateCrop, executeDeleteCrop } from '../services/cropService.js'
 import { executeCreateZone, executeDeleteZone } from "../services/zoneService.js";
 import { executeCreateState, executeDeleteState } from "../services/stateService.js";
+import { executeCreateDistrict, executeDeleteDistrict } from "../services/districtService.js";
 
 export const getApprovalRequests = async (req, res) => {
     try {
@@ -252,7 +253,8 @@ export const approveRequest = async (req, res) => {
 
                 entityId = await executeCreateZone(
                     connection,
-                    payload
+                    payload,
+                    req.user.id
                 );
 
                 break;
@@ -260,7 +262,8 @@ export const approveRequest = async (req, res) => {
 
                 entityId = await executeDeleteZone(
                     connection,
-                    payload.id
+                    payload.id,
+                    req.user.id
                 );
 
                 break;
@@ -269,7 +272,8 @@ export const approveRequest = async (req, res) => {
 
                 entityId = await executeCreateState(
                     connection,
-                    payload
+                    payload,
+                    req.user.id
                 );
 
                 break;
@@ -277,7 +281,8 @@ export const approveRequest = async (req, res) => {
 
                 entityId = await executeDeleteState(
                     connection,
-                    payload.id
+                    payload.id,
+                    req.user.id
                 );
 
                 break;
@@ -286,7 +291,8 @@ export const approveRequest = async (req, res) => {
 
                 entityId = await executeCreateDistrict(
                     connection,
-                    payload
+                    payload,
+                    req.user.id
                 );
 
                 break;
@@ -295,7 +301,8 @@ export const approveRequest = async (req, res) => {
 
                 entityId = await executeDeleteDistrict(
                     connection,
-                    payload.id
+                    payload.id,
+                    req.user.id
                 );
 
                 break;

@@ -45,7 +45,6 @@ export const createRole = async (req, res) => {
             name,
             description
         } = req.body;
-        console.log(req.user)
 
         if (!name?.trim()) {
             await connection.rollback();

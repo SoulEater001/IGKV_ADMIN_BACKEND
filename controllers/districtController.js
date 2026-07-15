@@ -2,6 +2,9 @@ import { pool } from "../config/db.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
+import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
+import { requiresApproval } from "../utils/approval.js";
+import { executeCreateDistrict, executeDeleteDistrict } from "../services/districtService.js";
 
 export const getDistrictsByZone = async (req, res) => {
     try {
@@ -298,7 +301,7 @@ export const createDistrict = async (req, res) => {
             zone_id,
             district_lg_code
         } = req.body;
-        console.log(req.body)
+
         if (
             !name_en?.trim() ||
             !name_hi?.trim() ||
@@ -312,108 +315,91 @@ export const createDistrict = async (req, res) => {
             });
         }
 
-        const [[existing]] = await pool.query(
-            `
-            SELECT district_id
+        const districtData = {
+            name_en: name_en.trim(),
+            name_hi: name_hi.trim(),
+            state_id,
+            zone_id,
+            district_lg_code
+        };
 
-            FROM m_district
+        if (requiresApproval(req.user)) {
 
-            WHERE
-                (
-                    LOWER(name)=LOWER(?)
-                    OR district_lg_code=?
-                )
-            AND deleted IS NULL
-            `,
-            [
-                name_en.trim(),
-                district_lg_code
-            ]
-        );
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.DISTRICT,
+                ACTIONS.CREATE,
+                {
+                    name_en: districtData.name_en
+                }
+            );
 
-        if (existing) {
-            await connection.rollback();
-            return res.status(409).json({
-                success: false,
-                message: "District already exists."
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A district creation request with this name is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.DISTRICT,
+                action: ACTIONS.CREATE,
+                payload: districtData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.DISTRICT,
+                entityId: req.user.id,
+                description: `${req.user.name} requested creation of district ${districtData.name_en}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "District creation request sent for approval."
+            });
+
+        } else {
+            const districtId = await executeCreateDistrict(
+                connection,
+                districtData,
+                req.user.id
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.CREATE,
+                entity: ENTITIES.DISTRICT,
+                entityId: districtId,
+                description: `${req.user.name} created district ${districtData.name_en}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(201).json({
+                success: true,
+                message: "District created successfully."
             });
         }
-
-        const [result] = await connection.query(
-            `
-            INSERT INTO m_district
-            (
-                name,
-                state_id,
-                zone_id,
-                district_lg_code,
-                create_by
-            )
-            VALUES (?, ?, ?, ?, ?)
-            `,
-            [
-                name_en.trim(),
-                String(state_id),
-                zone_id,
-                district_lg_code,
-                req.user.id
-            ]
-        );
-
-        const districtId = result.insertId;
-
-        await connection.query(
-            `
-            INSERT INTO m_district_language
-            (
-                district_id,
-                state_id,
-                language_id,
-                name,
-                create_by
-            )
-            VALUES
-                (?, ?, 2, ?, ?),
-                (?, ?, 1, ?, ?)
-            `,
-            [
-                districtId,
-                state_id,
-                name_en.trim(),
-                req.user.id,
-
-                districtId,
-                state_id,
-                name_hi.trim(),
-                req.user.id
-            ]
-        );
-
-        await connection.commit();
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.CREATE,
-            entity: ENTITIES.DISTRICT,
-            entityId: districtId,
-            description: `${req.user.name} created district ${name_en.trim()}`,
-            ipAddress: req.ip
-        });
-
-        return res.status(201).json({
-            success: true,
-            message: "District created successfully."
-        });
-
     } catch (error) {
 
         console.error(error);
         await connection.rollback();
         return res.status(500).json({
             success: false,
-            message: "Failed to create district."
+            message: error.message || "Failed to create district."
         });
-
     } finally {
         connection.release();
     }
@@ -659,7 +645,7 @@ export const deleteDistrict = async (req, res) => {
         );
 
         if (!district) {
-            await connection.rollback
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "District not found."
@@ -679,7 +665,7 @@ export const deleteDistrict = async (req, res) => {
         );
 
         if (blocks.total > 0) {
-            await connection.rollback
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete district because it contains blocks."
@@ -698,7 +684,7 @@ export const deleteDistrict = async (req, res) => {
         );
 
         if (mainUsage.total > 0) {
-            await connection.rollback
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete district because it is used in advisories."
@@ -717,64 +703,88 @@ export const deleteDistrict = async (req, res) => {
         );
 
         if (detailUsage.total > 0) {
-            await connection.rollback
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete district because it is used in advisory details."
             });
         }
+        const payload = {
+            id: district.district_id,
+            name: district.name
+        }
+        if (requiresApproval(req.user)) {
 
-        await connection.query(
-            `
-            UPDATE m_district
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.DISTRICT,
+                ACTIONS.DELETE,
+                {
+                    id : payload.district_id
+                }
+            );
 
-            SET
-                deleted='Y',
-                delete_datetime=NOW(),
-                delete_by = ?
+            if (pending) {
 
-            WHERE district_id=?
-                AND deleted is NULL
-            `,
-            [req.user.id, id]
-        );
+                await connection.rollback();
 
-        await connection.query(
-            `
-            UPDATE m_district_language
-            SET
-                deleted = 'Y',
-                delete_datetime = NOW(),
-                delete_by = ?
-            WHERE
-                district_id = ?
-                AND deleted IS NULL
-            `,
-            [
-                req.user.id,
-                id
-            ]
-        );
-        await connection.commit();
+                return res.status(409).json({
+                    success: false,
+                    message: "A district deletion request is already pending."
+                });
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.DELETE,
-            entity: ENTITIES.DISTRICT,
-            entityId: id,
-            description: `${req.user.name} deleted district ${district.name}`,
-            ipAddress: req.ip
-        });
+            }
 
-        return res.status(200).json({
-            success: true,
-            message: "District deleted successfully."
-        });
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.DISTRICT,
+                action: ACTIONS.DELETE,
+                payload,
+                requestedBy: req.user.id
+            });
 
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.DISTRICT,
+                entityId: id,
+                description: `${req.user.name} requested deletion of district ${district.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "District deletion request sent for approval."
+            });
+
+        } else {
+            await executeDeleteDistrict(
+                connection,
+                payload.id,
+                req.user.id
+            );
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.DELETE,
+                entity: ENTITIES.DISTRICT,
+                entityId: id,
+                description: `${req.user.name} deleted district ${district.name}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "District deleted successfully."
+            });
+        }
     } catch (error) {
 
         console.error(error);
-        await connection.rollback
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to delete district."
