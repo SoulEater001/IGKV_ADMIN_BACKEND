@@ -2,6 +2,8 @@ import { pool } from "../config/db.js"
 import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
+import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
+import { requiresApproval } from "../utils/approval.js";
 
 export const getBlocksByDistrict = async (req, res) => {
     try {
@@ -72,8 +74,9 @@ export const getBlocks = async (req, res) => {
 
             where += `
                 AND (
-                    LOWER(b.name) LIKE ?
-                    OR LOWER(d.name) LIKE ?
+                    LOWER(en.name) LIKE LOWER(?)
+                    OR LOWER(b.name) LIKE LOWER(?)
+                    OR LOWER(d.name) LIKE LOWER(?)
                     OR CAST(b.block_lg_code AS CHAR) LIKE ?
                 )
             `;
@@ -83,6 +86,7 @@ export const getBlocks = async (req, res) => {
             params.push(
                 keyword,
                 keyword,
+                keyword,
                 keyword
             );
 
@@ -90,13 +94,16 @@ export const getBlocks = async (req, res) => {
 
         const [[countResult]] = await pool.query(
             `
-            SELECT COUNT(*) AS total
+             SELECT COUNT(*) AS total
 
             FROM m_block b
 
             LEFT JOIN m_district d
                 ON b.district_id = d.district_id
-
+            LEFT JOIN m_block_language en
+                ON en.block_id = b.block_id
+                AND en.language_id = 2
+                AND en.deleted IS NULL
             ${where}
             `,
             params
@@ -112,12 +119,20 @@ export const getBlocks = async (req, res) => {
                 b.longitude,
                 b.district_id,
                 d.name AS district_name,
-                b.create_datetime
+                b.create_datetime,
+
+                en.name AS name_en
 
             FROM m_block b
 
             LEFT JOIN m_district d
                 ON b.district_id = d.district_id
+                and B.deleted IS NULL
+
+            LEFT JOIN m_block_language en
+                ON en.block_id = b.block_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
 
             ${where}
 
@@ -133,6 +148,7 @@ export const getBlocks = async (req, res) => {
                 offset
             ]
         );
+        console.log(countResult.total / pageSize)
 
         return res.status(200).json({
             success: true,
@@ -160,22 +176,47 @@ export const getBlockById = async (req, res) => {
 
         const { id } = req.params;
 
-        const [rows] = await pool.query(
+        const [[block]] = await pool.query(
             `
-            SELECT *
+             SELECT
+                b.block_id,
+                b.district_id,
+                b.block_lg_code,
+                b.latitude,
+                b.longitude,
+                b.create_datetime,
 
-            FROM m_block
+                d.name AS district_name,
 
-            WHERE block_id = ?
-              AND (
-                    deleted IS NULL
-                    OR deleted = 'N'
-              )
+                en.name AS name_en,
+                hi.name AS name_hi
+
+            FROM m_block b
+
+            LEFT JOIN m_district d
+                ON d.district_id = b.district_id
+
+            LEFT JOIN m_block_language en
+                ON en.block_id = b.block_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
+
+            LEFT JOIN m_block_language hi
+                ON hi.block_id = b.block_id
+               AND hi.language_id = 1
+               AND hi.deleted IS NULL
+
+            WHERE
+                b.block_id = ?
+                AND (
+                    b.deleted IS NULL
+                    OR b.deleted = 'N'
+                )
             `,
             [id]
         );
 
-        if (!rows.length) {
+        if (!block) {
 
             return res.status(404).json({
                 success: false,
@@ -186,7 +227,7 @@ export const getBlockById = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            data: rows[0]
+            data: block
         });
 
     } catch (error) {
@@ -202,18 +243,20 @@ export const getBlockById = async (req, res) => {
 };
 
 export const createBlock = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const {
-            name,
+            name_en,
+            name_hi,
             district_id,
             block_lg_code,
             latitude = null,
             longitude = null
         } = req.body;
 
-        if (!name?.trim() || !district_id || !block_lg_code) {
-
+        if (!name_en?.trim() || !name_hi?.trim() || !district_id || !block_lg_code) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Name, District and LG Code are required."
@@ -221,7 +264,7 @@ export const createBlock = async (req, res) => {
 
         }
 
-        const [[existing]] = await pool.query(
+        const [[existing]] = await connection.query(
             `
             SELECT block_id
 
@@ -237,13 +280,13 @@ export const createBlock = async (req, res) => {
                   )
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 block_lg_code
             ]
         );
 
         if (existing) {
-
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Block already exists."
@@ -251,7 +294,7 @@ export const createBlock = async (req, res) => {
 
         }
 
-        const [result] = await pool.query(
+        const [result] = await connection.query(
             `
             INSERT INTO m_block
             (
@@ -259,25 +302,53 @@ export const createBlock = async (req, res) => {
                 district_id,
                 block_lg_code,
                 latitude,
-                longitude
+                longitude,
+                create_by
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 district_id,
                 block_lg_code,
                 latitude,
-                longitude
+                longitude,
+                req.user.id
             ]
         );
+        const blockId = result.insertId;
+        await connection.query(
+            `
+            INSERT INTO m_block_language
+            (
+                block_id,
+                language_id,
+                name,
+                create_by
+            )
+            VALUES
+                (? , 2, ?, ?),
+                (?, 1, ?, ?)
+            `,
+            [
+                blockId,
+                name_en.trim(),
+                req.user.id,
+
+                blockId,
+                name_hi.trim(),
+                req.user.id
+            ]
+        );
+
+        await connection.commit();
 
         await logActivity({
             userId: req.user.id,
             action: ACTIONS.CREATE,
             entity: ENTITIES.BLOCK,
-            entityId: result.insertId,
-            description: `${req.user.name} created block ${name.trim()}`,
+            entityId: blockId,
+            description: `${req.user.name} created block ${name_en.trim()}`,
             ipAddress: req.ip
         });
 
@@ -289,33 +360,37 @@ export const createBlock = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to create block."
         });
 
+    } finally {
+        connection.release();
     }
 };
 
 export const updateBlock = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const { id } = req.params;
 
         const {
-            name,
+            name_en,
+            name_hi,
             district_id,
             block_lg_code,
             latitude = null,
             longitude = null
         } = req.body;
 
-        if (!name?.trim() || !district_id || !block_lg_code) {
-
+        if (!name_hi?.trim() || !name_en?.trim() || !district_id || !block_lg_code) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
-                message: "Name, District and LG Code are required."
+                message: "English name, Hindi name, District and LG Code are required."
             });
 
         }
@@ -329,12 +404,13 @@ export const updateBlock = async (req, res) => {
             FROM m_block
 
             WHERE block_id=?
+             AND deleted IS NULL
             `,
             [id]
         );
 
         if (!block) {
-
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Block not found."
@@ -359,14 +435,14 @@ export const updateBlock = async (req, res) => {
                   )
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 block_lg_code,
                 id
             ]
         );
 
         if (existing) {
-
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Block already exists."
@@ -411,24 +487,68 @@ export const updateBlock = async (req, res) => {
                 district_id=?,
                 block_lg_code=?,
                 latitude=?,
-                longitude=?
+                longitude=?,
+                modify_by = ?,
+                modify_datetime = NOW()
 
             WHERE block_id=?
             `,
             [
-                name.trim(),
+                name_en.trim(),
                 district_id,
                 block_lg_code,
                 latitude,
                 longitude,
+                req.user.id,
                 id
             ]
         );
 
+        await connection.query(
+            `
+            UPDATE m_block_language
+            SET
+                name = ?,
+                modify_by = ?,
+                modify_datetime = NOW()
+            WHERE
+                block_id = ?
+                AND language_id = 2
+                AND deleted IS NULL
+            `,
+            [
+                name_en.trim(),
+                req.user.id,
+                id
+            ]
+        );
+
+        await connection.query(
+            `
+            UPDATE m_block_language
+            SET
+                name = ?,
+                modify_by = ?,
+                 modify_datetime = NOW()
+            WHERE
+                block_id = ?
+                AND language_id = 1
+                AND deleted IS NULL
+            `,
+            [
+                name_hi.trim(),
+                req.user.id,
+                id
+            ]
+        );
+
+        await connection.commit();
+
+
         const description =
             block.block_lg_code === block_lg_code
-                ? `${req.user.name} updated block ${name.trim()}`
-                : `${req.user.name} updated block ${name.trim()} and changed its LG code`;
+                ? `${req.user.name} updated block ${name_en.trim()}`
+                : `${req.user.name} updated block ${name_en.trim()} and changed its LG code`;
 
         await logActivity({
             userId: req.user.id,
@@ -447,21 +567,25 @@ export const updateBlock = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to update block."
         });
 
+    } finally {
+        connection.release();
     }
 };
 
 export const deleteBlock = async (req, res) => {
-    try {
+    const connection = await pool.getConnection();
 
+    try {
+        await connection.beginTransaction();
         const { id } = req.params;
 
-        const [[block]] = await pool.query(
+        const [[block]] = await connection.query(
             `
             SELECT
                 block_id,
@@ -471,12 +595,13 @@ export const deleteBlock = async (req, res) => {
             FROM m_block
 
             WHERE block_id=?
+            AND deleted IS NULL
             `,
             [id]
         );
 
         if (!block) {
-
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Block not found."
@@ -484,7 +609,7 @@ export const deleteBlock = async (req, res) => {
 
         }
 
-        const [[mainUsage]] = await pool.query(
+        const [[mainUsage]] = await connection.query(
             `
             SELECT COUNT(*) AS total
 
@@ -495,7 +620,7 @@ export const deleteBlock = async (req, res) => {
             [block.block_lg_code]
         );
 
-        const [[detailUsage]] = await pool.query(
+        const [[detailUsage]] = await connection.query(
             `
             SELECT COUNT(*) AS total
 
@@ -507,7 +632,7 @@ export const deleteBlock = async (req, res) => {
         );
 
         if (mainUsage.total > 0 || detailUsage.total > 0) {
-
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Cannot delete block because it is used in advisories."
@@ -515,18 +640,40 @@ export const deleteBlock = async (req, res) => {
 
         }
 
-        await pool.query(
+        await connection.query(
             `
             UPDATE m_block
 
             SET
                 deleted='Y',
+                 delete_by = ?,
                 delete_datetime=NOW()
 
             WHERE block_id=?
+                AND deleted IS NULL
             `,
-            [id]
+            [req.user.id,id]
         );
+
+        await connection.query(
+            `
+            UPDATE m_block_language
+            SET
+                deleted = 'Y',
+                delete_by = ?,
+                delete_datetime = NOW()
+            WHERE
+                block_id = ?
+                AND deleted IS NULL
+            `,
+            [
+                req.user.id,
+                id
+            ]
+        );
+
+        await connection.commit();
+
 
         await logActivity({
             userId: req.user.id,
@@ -545,11 +692,13 @@ export const deleteBlock = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to delete block."
         });
 
+    } finally {
+        connection.release();
     }
 };
