@@ -13,11 +13,33 @@ export const getAdvisoriesPaginated = async (req, res) => {
             districtLgCode,
             blockLgCode,
             languageId,
-            advisoryDate,
+            fromDate,
+            toDate,
             search = '',
             page = 1,
             limit = 10,
         } = req.query;
+
+        if (fromDate && toDate) {
+
+            const from = new Date(fromDate);
+            const to = new Date(toDate);
+
+            if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid date format."
+                });
+            }
+
+            if (from > to) {
+                return res.status(400).json({
+                    success: false,
+                    message: "From date cannot be later than To date."
+                });
+            }
+
+        }
 
         if (!stateLgCode || !districtLgCode || !blockLgCode || !languageId) {
             return res.status(400).json({
@@ -43,10 +65,16 @@ export const getAdvisoriesPaginated = async (req, res) => {
             languageId
         ];
 
-        if (advisoryDate) {
-            where.push("DATE(m.advisory_date) = ?");
-            params.push(advisoryDate); // yyyy-mm-dd
+        if (fromDate) {
+            where.push("DATE(m.advisory_date) >= ?");
+            params.push(fromDate);
         }
+
+        if (toDate) {
+            where.push("DATE(m.advisory_date) <= ?");
+            params.push(toDate);
+        }
+
         const whereSql = where.join("\nAND ");
 
         let searchSql = "";
