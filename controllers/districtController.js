@@ -53,9 +53,10 @@ export const getDistrictsPaginated = async (req, res) => {
         const {
             page = 1,
             limit = 10,
-            search = ''
+            search = '',
+            stateId
         } = req.query;
-
+        console.log(stateId)
         const pageNumber = Number(page);
 
         const pageSize = Number(limit);
@@ -65,14 +66,24 @@ export const getDistrictsPaginated = async (req, res) => {
         let where = `
             WHERE d.deleted IS NULL
         `;
-
+        
         const params = [];
+
+        if(stateId){
+            where += `
+        AND d.state_id = ?
+         `;
+
+    params.push(Number(stateId));
+        }
+
 
         if (search.trim()) {
 
             where += `
                 AND (
-                    LOWER(en.name) LIKE LOWER(?)
+                    CAST(d.district_id AS CHAR) LIKE ?
+                    OR LOWER(en.name) LIKE LOWER(?)
                     OR LOWER(hi.name) LIKE LOWER(?)
                     OR LOWER(d.name) LIKE LOWER(?)
                     OR LOWER(s.name) LIKE LOWER(?)
@@ -84,6 +95,7 @@ export const getDistrictsPaginated = async (req, res) => {
             const keyword = `%${search.trim()}%`;
 
             params.push(
+                keyword,
                 keyword,
                 keyword,
                 keyword,
@@ -200,7 +212,8 @@ export const getDistricts = async (req, res) => {
         const [rows] = await pool.query(`
             SELECT
                 district_id,
-                name
+                name,
+                state_id
             FROM m_district
             WHERE deleted IS NULL
             ORDER BY name ASC

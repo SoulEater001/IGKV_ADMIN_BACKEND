@@ -4,7 +4,7 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { requiresApproval } from "../utils/approval.js";
-import { executeCreateBlock ,executeDeleteBlock} from "../services/blockService.js";
+import { executeCreateBlock, executeDeleteBlock } from "../services/blockService.js";
 
 export const getBlocksByDistrict = async (req, res) => {
     try {
@@ -53,7 +53,9 @@ export const getBlocksPaginated = async (req, res) => {
         const {
             page = 1,
             limit = 10,
-            search = ""
+            search = "",
+            districtId,
+            stateId
         } = req.query;
 
         const pageNumber = Number(page);
@@ -70,6 +72,25 @@ export const getBlocksPaginated = async (req, res) => {
         `;
 
         const params = [];
+
+        if (stateId) {
+
+            where += `
+        AND d.state_id = ?
+        `;
+
+            params.push(Number(stateId));
+
+        }
+        if (districtId) {
+
+            where += `
+        AND b.district_id = ?
+         `;
+
+            params.push(Number(districtId));
+
+        }
 
         if (search.trim()) {
 
