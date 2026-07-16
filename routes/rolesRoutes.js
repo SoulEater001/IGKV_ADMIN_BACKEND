@@ -1,5 +1,5 @@
 import express from 'express'
-import { getRoles, createRole, updateRole, deleteRole, getRolePermissions, updateRolePermissions } from "../controllers/roleController.js";
+import { getRoles, createRole, updateRole, deleteRole, getRolePermissions } from "../controllers/roleController.js";
 import { authenticate, authorize} from "../middleware/authMiddleware.js";
 import { ROLES } from '../constant/index.js';
 
@@ -19,11 +19,5 @@ router.get(
     getRolePermissions
 );
 
-router.put(
-    "/:id/permissions",
-    authenticate,
-    authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN),
-    updateRolePermissions
-);
 
 export default router;

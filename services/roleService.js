@@ -1,3 +1,5 @@
+import { invalidateRoleUsers } from "../utils/token.js";
+
 export const executeCreateRole = async (connection, data) => {
 
     const [[existing]] = await connection.query(
@@ -65,5 +67,63 @@ export const executeDeleteRole = async (
     }
 
     return roleId;
+
+};
+
+export const executeUpdateRole = async (
+    connection,
+    roleData
+) => {
+
+    await connection.query(
+        `
+        UPDATE roles
+        SET
+            name = ?,
+            description = ?
+        WHERE id = ?
+        `,
+        [
+            roleData.name,
+            roleData.description,
+            roleData.id
+        ]
+    );
+
+    await connection.query(
+        `
+        DELETE FROM role_permissions
+        WHERE role_id = ?
+        `,
+        [roleData.id]
+    );
+
+    if (roleData.permissionIds.length > 0) {
+
+        const values = roleData.permissionIds.map(permissionId => [
+            roleData.id,
+            permissionId
+        ]);
+
+        await connection.query(
+            `
+            INSERT INTO role_permissions
+            (
+                role_id,
+                permission_id
+            )
+            VALUES ?
+            `,
+            [values]
+        );
+
+    }
+
+    await invalidateRoleUsers(
+        connection,
+        roleData.id
+    );
+
+    return roleData.id;
 
 };

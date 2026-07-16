@@ -4,20 +4,32 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { ROLES } from "../constant/index.js";
-import { executeCreateRole, executeDeleteRole } from '../services/roleService.js'
-import {requiresApproval, canManageRole, isSystemRole} from '../utils/approval.js'
-import {invalidateRoleUsers, invalidateUserTokens} from '../utils/token.js'
+import { executeCreateRole, executeDeleteRole, executeUpdateRole } from '../services/roleService.js'
+import { requiresApproval, canManageRole, isSystemRole } from '../utils/approval.js'
+import { invalidateRoleUsers, invalidateUserTokens } from '../utils/token.js'
 
 export const getRoles = async (req, res) => {
     try {
 
         const [rows] = await pool.query(`
             SELECT
-                id,
-                name,
-                description
-            FROM roles
-            ORDER BY name ASC
+                r.id,
+                r.name,
+                r.description,
+
+                COUNT(rp.permission_id) AS permission_count
+
+            FROM roles r
+
+            LEFT JOIN role_permissions rp
+                ON rp.role_id = r.id
+
+            GROUP BY
+                r.id,
+                r.name,
+                r.description
+
+            ORDER BY r.name ASC
         `);
 
         return res.status(200).json({
@@ -94,7 +106,7 @@ export const createRole = async (req, res) => {
                 ENTITIES.ROLE,
                 ACTIONS.CREATE,
                 {
-                   name: roleData.name
+                    name: roleData.name
                 }
             );
 
@@ -170,7 +182,7 @@ export const createRole = async (req, res) => {
             message: "Failed to create role."
         });
 
-    }finally {
+    } finally {
 
         connection.release();
 
@@ -178,23 +190,27 @@ export const createRole = async (req, res) => {
 };
 
 export const updateRole = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const { id } = req.params;
 
         const {
             name,
-            description
+            description,
+            permissionIds = []
         } = req.body;
+        const normalizedName = name?.trim().toUpperCase();
 
-        if (!name?.trim()) {
+        if (!normalizedName?.trim()) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Role name is required."
             });
         }
 
-        const [[role]] = await pool.query(
+        const [[role]] = await connection.query(
             `
             SELECT id, name
             FROM roles
@@ -204,13 +220,14 @@ export const updateRole = async (req, res) => {
         );
 
         if (!role) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Role not found."
             });
         }
 
-        const [[existing]] = await pool.query(
+        const [[existing]] = await connection.query(
             `
             SELECT id
             FROM roles
@@ -218,49 +235,121 @@ export const updateRole = async (req, res) => {
               AND id <> ?
             `,
             [
-                name.trim(),
+                normalizedName.trim(),
                 id
             ]
         );
 
         if (existing) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Role already exists."
             });
         }
 
-        await pool.query(
-            `
-            UPDATE roles
-            SET
-                name = ?,
-                description = ?
-            WHERE id = ?
-            `,
-            [
-                name.trim(),
-                description?.trim() || null,
-                id
-            ]
-        );
+        if (permissionIds.length > 0) {
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.ROLE,
-            entityId: id,
-            description: `${req.user.name} updated role ${name.trim()}`,
-            ipAddress: req.ip
-        });
+            const [validPermissions] = await connection.query(
+                `
+                SELECT id
+                FROM permissions
+                WHERE id IN (?)
+                `,
+                [permissionIds]
+            );
 
-        return res.status(200).json({
-            success: true,
-            message: "Role updated successfully."
-        });
+            if (validPermissions.length !== permissionIds.length) {
 
+                await connection.rollback();
+
+                return res.status(400).json({
+                    success: false,
+                    message: "One or more permission IDs are invalid."
+                });
+
+            }
+
+        }
+
+
+        const roleData = {
+            id: Number(id),
+            name: normalizedName,
+            description: description?.trim() || null,
+            permissionIds
+        };
+
+        if (requiresApproval(req.user)) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ROLE,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "An update request for this role is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.ROLE,
+                action: ACTIONS.UPDATE,
+                recordId: Number(id),
+                payload: roleData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.ROLE,
+                entityId: Number(id),
+                description: `${req.user.name} requested update of role ${normalizedName}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Role update request sent for approval."
+            });
+
+        } else {
+
+            await executeUpdateRole(
+                connection,
+                roleData
+            );
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.ROLE,
+                entityId: Number(id),
+                description: `${req.user.name} updated role ${normalizedName.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "Role updated successfully."
+            });
+        }
     } catch (error) {
-
+        await connection.rollback();
         console.error(error);
 
         return res.status(500).json({
@@ -268,7 +357,7 @@ export const updateRole = async (req, res) => {
             message: "Failed to update role."
         });
 
-    }
+    } finally { connection.release(); }
 };
 
 export const deleteRole = async (req, res) => {
@@ -376,7 +465,7 @@ export const deleteRole = async (req, res) => {
             message: "Failed to delete role."
         });
 
-    }finally {
+    } finally {
 
         connection.release();
 
@@ -438,122 +527,4 @@ export const getRolePermissions = async (req, res) => {
         });
 
     }
-};
-
-export const updateRolePermissions = async (req, res) => {
-
-    const connection = await pool.getConnection();
-
-    try {
-
-        const { id } = req.params;
-
-        const { permissionIds = [] } = req.body;
-
-        const [[role]] = await connection.query(
-            `
-            SELECT id, name
-            FROM roles
-            WHERE id = ?
-            `,
-            [id]
-        );
-
-        if (!role) {
-
-            connection.release();
-
-            return res.status(404).json({
-                success: false,
-                message: "Role not found."
-            });
-
-        }
-
-        const [validPermissions] = await connection.query(
-            `
-    SELECT id
-    FROM permissions
-    WHERE id IN (?)
-    `,
-            [permissionIds]
-        );
-
-        if (validPermissions.length !== permissionIds.length) {
-
-            connection.release();
-
-            return res.status(400).json({
-                success: false,
-                message: "One or more permission IDs are invalid."
-            });
-
-        }
-
-        await connection.beginTransaction();
-
-        await connection.query(
-            `
-            DELETE
-            FROM role_permissions
-            WHERE role_id = ?
-            `,
-            [id]
-        );
-
-        if (permissionIds.length > 0) {
-
-            const values = permissionIds.map(permissionId => [
-                id,
-                permissionId
-            ]);
-
-            await connection.query(
-                `
-                INSERT INTO role_permissions
-                (
-                    role_id,
-                    permission_id
-                )
-                VALUES ?
-                `,
-                [values]
-            );
-
-        }
-        await invalidateRoleUsers(connection, id);
-
-        await connection.commit();
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.ROLE,
-            entityId: id,
-            description: `${req.user.name} updated permissions for role ${role.name} (${permissionIds.length} permissions)`,
-            ipAddress: req.ip
-        });
-
-        connection.release();
-
-        return res.status(200).json({
-            success: true,
-            message: "Role permissions updated successfully."
-        });
-
-    } catch (error) {
-
-        await connection.rollback();
-
-        connection.release();
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to update role permissions."
-        });
-
-    }
-
 };

@@ -4,7 +4,7 @@ import { ENTITIES } from "../constant/activityEntities.js";
 import { ACTIONS } from "../constant/activityActions.js";
 import { APPROVAL_STATUS, ROLES } from "../constant/index.js";
 import { logActivity } from "../utils/activityLogger.js";
-import { executeCreateRole, executeDeleteRole } from "../services/roleService.js";
+import { executeCreateRole, executeDeleteRole, executeUpdateRole } from "../services/roleService.js";
 import { executeCreatePermission, executeDeletePermission } from "../services/permissionService.js";
 import { executeCreateCategory, executeDeleteCategory } from "../services/categoryService.js";
 import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType } from "../services/advisoryService.js";
@@ -152,6 +152,15 @@ export const approveRequest = async (req, res) => {
             case `${ENTITIES.ROLE}:${ACTIONS.CREATE}`:
 
                 entityId = await executeCreateRole(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.ROLE}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateRole(
                     connection,
                     payload
                 );
@@ -396,7 +405,7 @@ export const approveRequest = async (req, res) => {
                 [
                     APPROVAL_STATUS.REJECTED,
                     req.user.id,
-                     error.message ?? remarks ?? null,
+                    error.message ?? remarks ?? null,
                     request.id
                 ]
             );
