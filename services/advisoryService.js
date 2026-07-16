@@ -232,3 +232,48 @@ export const executeDeleteAdvisory = async (
     return advisoryId;
 
 };
+
+export const executeUpdateAdvisory = async (
+    connection,
+    data
+) => {
+
+    const {
+        id,
+        state_lg_code,
+        district_lg_code,
+        block_lg_code,
+        imd_category_id,
+        imd_advisory_type_id,
+        advisory,
+        language_id
+    } = data;
+
+    await connection.query(
+        `
+        UPDATE imd_advisory_detail
+        SET
+            state_lg_code = ?,
+            district_lg_code = ?,
+            block_lg_code = ?,
+            cat_id = ?,
+            advisory_type_id = ?,
+            advisory = ?,
+            language_id = ?
+        WHERE id = ?
+        `,
+        [
+            state_lg_code,
+            district_lg_code,
+            block_lg_code,
+            imd_category_id,
+            imd_advisory_type_id,
+            advisory.trim(),
+            language_id,
+            id
+        ]
+    );
+
+    return id;
+
+};

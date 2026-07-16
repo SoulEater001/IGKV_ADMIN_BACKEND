@@ -4,7 +4,7 @@ import { ENTITIES } from "../constant/activityEntities.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
 import { requiresApproval } from '../utils/approval.js'
-import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType, executeUpdateAdvisoryType } from "../services/advisoryService.js";
+import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType, executeUpdateAdvisory, executeUpdateAdvisoryType } from "../services/advisoryService.js";
 
 export const getAdvisoriesPaginated = async (req, res) => {
     try {
@@ -608,7 +608,9 @@ export const deleteAdvisoryType = async (req, res) => {
 };
 
 export const updateAdvisory = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
+        await connection.beginTransaction();
         const { id } = req.params;
 
         const {
@@ -629,13 +631,14 @@ export const updateAdvisory = async (req, res) => {
             advisory.trim() === "" ||
             language_id == null
         ) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "All fields are required."
             });
         }
 
-        const [existing] = await pool.query(
+        const [[existing]] = await connection.query(
             `
             SELECT id
             FROM imd_advisory_detail
@@ -644,59 +647,108 @@ export const updateAdvisory = async (req, res) => {
             [id]
         );
 
-        if (existing.length === 0) {
+        if (!existing) {
             return res.status(404).json({
                 success: false,
                 message: "Advisory not found."
             });
         }
 
-        await pool.query(
-            `
-            UPDATE imd_advisory_detail
-            SET
-                state_lg_code = ?,
-                district_lg_code = ?,
-                block_lg_code = ?,
-                cat_id = ?,
-                advisory_type_id = ?,
-                advisory = ?,
-                language_id = ?
-            WHERE id = ?
-            `,
-            [
-                state_lg_code,
-                district_lg_code,
-                block_lg_code,
-                imd_category_id,
-                imd_advisory_type_id,
-                advisory.trim(),
-                language_id,
-                id
-            ]
-        );
+        const advisoryData = {
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.ADVISORY,
-            entityId: id,
-            description: `${req.user.name} updated an advisory`,
-            ipAddress: req.ip
-        });
+            id: Number(id),
 
-        res.json({
-            success: true,
-            message: "Advisory updated successfully."
-        });
+            state_lg_code,
+            district_lg_code,
+            block_lg_code,
 
+            imd_category_id,
+            imd_advisory_type_id,
+
+            advisory: advisory.trim(),
+
+            language_id
+
+        };
+
+        if (requiresApproval(req.user)) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ADVISORY,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "An advisory update request is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(
+                connection,
+                {
+                    resource: ENTITIES.ADVISORY,
+                    action: ACTIONS.UPDATE,
+                    recordId: Number(id),
+                    payload: advisoryData,
+                    requestedBy: req.user.id
+                }
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.ADVISORY,
+                entityId: Number(id),
+                description: `${req.user.name} requested update of an advisory`,
+                ipAddress: req.ip
+            });
+
+            return res.status(202).json({
+                success: true,
+                approvalRequired: true,
+                message: "Advisory update submitted for approval."
+            });
+
+        } else {
+            await executeUpdateAdvisory(
+                connection,
+                advisoryData
+            );
+
+            await connection.commit();
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.ADVISORY,
+                entityId: id,
+                description: `${req.user.name} updated an advisory`,
+                ipAddress: req.ip
+            });
+
+            res.json({
+                success: true,
+                message: "Advisory updated successfully."
+            });
+        }
     } catch (error) {
 
         console.error(error);
 
         res.status(500).json({
             success: false,
-            message: "Failed to update advisory."
+            message: error.message || "Failed to update advisory."
         });
 
     }
