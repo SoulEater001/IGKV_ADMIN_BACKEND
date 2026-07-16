@@ -4,7 +4,7 @@ import { ENTITIES } from "../constant/activityEntities.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
 import { requiresApproval } from '../utils/approval.js'
-import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType } from "../services/advisoryService.js";
+import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType, executeUpdateAdvisoryType } from "../services/advisoryService.js";
 
 export const getAdvisoriesPaginated = async (req, res) => {
     try {
@@ -322,7 +322,9 @@ export const createAdvisoryType = async (req, res) => {
 };
 
 export const updateAdvisoryType = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
+        await connection.beginTransaction();
         const { id } = req.params;
 
         const {
@@ -331,50 +333,143 @@ export const updateAdvisoryType = async (req, res) => {
         } = req.body;
 
         if (!imd_advisory_type_name?.trim()) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Advisory type name is required."
             });
         }
 
-        const [result] = await pool.query(
+        const [[advisoryType]] = await connection.query(
             `
-            UPDATE imd_advisory_type
-            SET
-                imd_advisory_type_name = ?,
-                imd_advisory_type_name_h = ?
+            SELECT
+                id,
+                imd_advisory_type_name
+            FROM imd_advisory_type
             WHERE id = ?
             `,
-            [
-                imd_advisory_type_name.trim(),
-                imd_advisory_type_name_h?.trim() || null,
-                id
-            ]
+            [id]
         );
 
-        if (result.affectedRows === 0) {
+        if (!advisoryType) {
+
+            await connection.rollback();
+
             return res.status(404).json({
                 success: false,
                 message: "Advisory type not found."
             });
+
         }
 
-        await logActivity({
-            userId: req.user.id,
-            action: ENTITIES.UPDATE,
-            entity: ENTITIES.ADVISORY_TYPE,
-            entityId: id,
-            description: `${req.user.name} updated advisory type ${imd_advisory_type_name.trim()}`,
-            ipAddress: req.ip
-        });
+        const [[existing]] = await connection.query(
+            `
+            SELECT id
+            FROM imd_advisory_type
+            WHERE LOWER(imd_advisory_type_name) = LOWER(?)
+              AND id <> ?
+            `,
+            [
+                imd_advisory_type_name.trim(),
+                id
+            ]
+        );
 
-        return res.status(200).json({
-            success: true,
-            message: "Advisory type updated successfully."
-        });
+        if (existing) {
 
+            await connection.rollback();
+
+            return res.status(409).json({
+                success: false,
+                message: "Advisory type already exists."
+            });
+
+        }
+        const advisoryTypeData = {
+
+            id: Number(id),
+
+            imd_advisory_type_name:
+                imd_advisory_type_name.trim(),
+
+            imd_advisory_type_name_h:
+                imd_advisory_type_name_h?.trim() || null
+
+        };
+
+        if (requiresApproval(req.user)) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ADVISORY_TYPE,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "An advisory type update request is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(
+                connection,
+                {
+                    resource: ENTITIES.ADVISORY_TYPE,
+                    action: ACTIONS.UPDATE,
+                    recordId: Number(id),
+                    payload: advisoryTypeData,
+                    requestedBy: req.user.id
+                }
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.ADVISORY_TYPE,
+                entityId: Number(id),
+                description: `${req.user.name} requested update of advisory type ${imd_advisory_type_name.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(202).json({
+                success: true,
+                approvalRequired: true,
+                message: "Advisory type update submitted for approval."
+            });
+
+        } else {
+            await executeUpdateAdvisoryType(
+                connection,
+                advisoryTypeData
+            );
+
+            await connection.commit();
+            await logActivity({
+                userId: req.user.id,
+                action: ENTITIES.UPDATE,
+                entity: ENTITIES.ADVISORY_TYPE,
+                entityId: Number(id),
+                description: `${req.user.name} updated advisory type ${imd_advisory_type_name.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "Advisory type updated successfully."
+            });
+        }
     } catch (error) {
-
+        await connection.rollback();
         console.error(error);
 
         return res.status(500).json({
@@ -382,7 +477,7 @@ export const updateAdvisoryType = async (req, res) => {
             message: "Failed to update advisory type."
         });
 
-    }
+    } finally { connection.release(); }
 };
 
 export const deleteAdvisoryType = async (req, res) => {

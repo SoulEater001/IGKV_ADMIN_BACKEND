@@ -68,6 +68,36 @@ export const executeDeleteAdvisoryType = async (
 
 };
 
+export const executeUpdateAdvisoryType = async (
+    connection,
+    data
+) => {
+
+    const {
+        id,
+        imd_advisory_type_name,
+        imd_advisory_type_name_h
+    } = data;
+
+    await connection.query(
+        `
+        UPDATE imd_advisory_type
+        SET
+            imd_advisory_type_name = ?,
+            imd_advisory_type_name_h = ?
+        WHERE id = ?
+        `,
+        [
+            imd_advisory_type_name.trim(),
+            imd_advisory_type_name_h?.trim() || null,
+            id
+        ]
+    );
+
+    return id;
+
+};
+
 export const executeCreateAdvisory = async (
     connection,
     data

@@ -7,7 +7,7 @@ import { logActivity } from "../utils/activityLogger.js";
 import { executeCreateRole, executeDeleteRole, executeUpdateRole } from "../services/roleService.js";
 import { executeCreatePermission, executeDeletePermission } from "../services/permissionService.js";
 import { executeCreateCategory, executeDeleteCategory, executeUpdateCategory } from "../services/categoryService.js";
-import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType } from "../services/advisoryService.js";
+import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType, executeUpdateAdvisoryType } from "../services/advisoryService.js";
 import { executeCreateCrop, executeDeleteCrop } from '../services/cropService.js'
 import { executeCreateZone, executeDeleteZone } from "../services/zoneService.js";
 import { executeCreateState, executeDeleteState } from "../services/stateService.js";
@@ -224,6 +224,15 @@ export const approveRequest = async (req, res) => {
             case `${ENTITIES.ADVISORY_TYPE}:${ACTIONS.CREATE}`:
 
                 entityId = await executeCreateAdvisoryType(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.ADVISORY_TYPE}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateAdvisoryType(
                     connection,
                     payload
                 );
