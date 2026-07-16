@@ -1,4 +1,5 @@
 import { pool } from "../config/db.js";
+import { APPROVAL_STATUS } from "../constant/index.js";
 
 export const getDashboardStats = async (req, res) => {
     try {
@@ -143,4 +144,33 @@ export const getActivities = async (req, res, next) => {
 
     }
 
+};
+
+export const getPendingApprovalCount = async (req, res) => {
+    try {
+
+        const [[result]] = await pool.query(
+            `
+            SELECT COUNT(*) AS count
+            FROM approval_requests
+            WHERE status = ?
+            `,
+            [APPROVAL_STATUS.PENDING]
+        );
+
+        return res.status(200).json({
+            success: true,
+            count: result.count
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch pending approval count."
+        });
+
+    }
 };

@@ -1,7 +1,8 @@
 import express from 'express'
-import { getDashboardStats, getActivities} from '../controllers/dashController.js';
-import {authenticate, authorize} from '../middleware/authMiddleware.js'
+import { getDashboardStats, getActivities, getPendingApprovalCount } from '../controllers/dashController.js';
+import { authenticate, authorize } from '../middleware/authMiddleware.js'
 import { ROLES } from '../constant/index.js';
+import { SYSTEM_ROLES } from '../utils/approval.js';
 
 const router = express.Router();
 
@@ -12,5 +13,7 @@ router.get(
     authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN),
     getActivities
 );
+
+router.get("/pending/count", authenticate, authorize(...SYSTEM_ROLES), getPendingApprovalCount);
 
 export default router;
