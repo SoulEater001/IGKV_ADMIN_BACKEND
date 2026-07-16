@@ -1,17 +1,8 @@
 import "dotenv/config";
 import bcrypt from "bcrypt";
 import { pool } from "../config/db.js";
-import { PERMISSION_ACTIONS, PERMISSION_RESOURCES } from "../constant/index.js";
-const ROLES = [
-    {
-        name: "SUPER_ADMIN",
-        description: "Has complete access to the system"
-    },
-    {
-        name: "ADMIN",
-        description: "Administrative user"
-    }
-];
+import { PERMISSION_ACTIONS, PERMISSION_RESOURCES, ROLES } from "../constant/index.js";
+
 
 const RESOURCES = PERMISSION_RESOURCES;
 
@@ -20,6 +11,16 @@ const ACTIONS = PERMISSION_ACTIONS
 const PERMISSIONS = RESOURCES.flatMap(resource =>
     ACTIONS.map(action => ({ resource, action }))
 );
+
+if (
+    !process.env.SUPER_ADMIN_EMAIL ||
+    !process.env.SUPER_ADMIN_PASSWORD ||
+    !process.env.SUPER_ADMIN_NAME
+) {
+    throw new Error(
+        "Missing SUPER_ADMIN environment variables."
+    );
+}
 
 async function seedRoles() {
     console.log("Seeding roles...");
@@ -128,8 +129,9 @@ async function assignSuperAdminPermissions() {
 }
 
 async function seed() {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         console.log("\n========== SEED STARTED ==========\n");
 
         await seedRoles();
@@ -143,15 +145,15 @@ async function seed() {
         await assignSuperAdminPermissions();
 
         console.log("\n========== SEED COMPLETED ==========\n");
-
+        await connection.commit();
     } catch (error) {
-
+        await connection.rollback();
         console.error("Seeding failed:");
         console.error(error);
 
     } finally {
 
-        await pool.end();
+        connection.release();
 
     }
 }

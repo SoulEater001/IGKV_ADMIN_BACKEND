@@ -4,7 +4,7 @@ import { logActivity } from "../utils/activityLogger.js";
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
-import { executeCreateUser, executeDeleteUser } from "../services/adminUserService.js";
+import { executeCreateUser, executeDeleteUser, executeUpdateUser } from "../services/adminUserService.js";
 import { ROLES } from "../constant/index.js";
 import { requiresApproval, canManageRole } from "../utils/approval.js";
 import { invalidateUserTokens } from '../utils/token.js'
@@ -299,6 +299,17 @@ WHERE id = ?
             });
         }
 
+        if (Number(id) === req.user.id) {
+
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: "You cannot modify your own account."
+            });
+
+        }
+
         const [existingRoles] = await connection.query(
             `
     SELECT role_id
@@ -369,92 +380,86 @@ WHERE id = ?
 
         }
 
-        let sql = `
-            UPDATE admin_users
-            SET
-                name = ?,
-                email = ?,
-                is_active = ?
-        `;
+        const userData = {
+            id: Number(id),
+            name: name.trim(),
+            email: email.trim(),
+            role_ids,
+            is_active,
+            password: password?.trim()
+                ? await bcrypt.hash(password, 10)
+                : null,
+            role_ids,
+            is_active,
+            currentRoleIds,
+            previousIsActive: Boolean(user.is_active)
+        };
 
-        const params = [
-            name.trim(),
-            email.trim(),
-            is_active ? 1 : 0
-        ];
+        if (requiresApproval(req.user)) {
 
-        if (password?.trim()) {
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.USER,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
+            );
 
-            sql += `, password = ?`;
+            if (pending) {
 
-            params.push(await bcrypt.hash(password, 10));
+                await connection.rollback();
 
+                return res.status(409).json({
+                    success: false,
+                    message: "An update request for this user is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.USER,
+                action: ACTIONS.UPDATE,
+                recordId: Number(id),
+                payload: userData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.USER,
+                entityId: Number(id),
+                description: `${req.user.name} requested update of user ${name.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "User update request sent for approval."
+            });
+
+        } else {
+            await executeUpdateUser(connection, userData);
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.USER,
+                entityId: Number(id),
+                description: `${req.user.name} updated user ${name.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "User updated successfully."
+            });
         }
-
-        sql += ` WHERE id = ?`;
-
-        params.push(id);
-
-        await connection.query(sql, params);
-
-        // Update role assignment
-        await connection.query(
-            `
-            DELETE FROM user_roles
-            WHERE user_id = ?
-            `,
-            [id]
-        );
-
-        const values = role_ids.map(roleId => [
-            id,
-            roleId
-        ]);
-
-        await connection.query(
-            `
-            INSERT INTO user_roles
-            (
-                user_id,
-                role_id
-            )
-            VALUES ?
-            `,
-            [values]
-        );
-
-        const newRoleIds = [...role_ids]
-            .map(Number)
-            .sort((a, b) => a - b);
-
-        const rolesChanged =
-            JSON.stringify(currentRoleIds) !==
-            JSON.stringify(newRoleIds);
-
-        const authorizationChanged =
-            rolesChanged ||
-            Boolean(user.is_active) !== Boolean(is_active);
-
-        if (authorizationChanged) {
-            await invalidateUserTokens(connection, id);
-        }
-
-        await connection.commit();
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.USER,
-            entityId: id,
-            description: `${req.user.name} updated user ${name.trim()}`,
-            ipAddress: req.ip
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "User updated successfully."
-        });
-
     } catch (error) {
 
         await connection.rollback();

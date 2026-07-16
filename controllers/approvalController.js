@@ -1,5 +1,5 @@
 import { pool } from "../config/db.js";
-import { executeCreateUser, executeDeleteUser } from "../services/adminUserService.js";
+import { executeCreateUser, executeDeleteUser, executeUpdateUser } from "../services/adminUserService.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { ACTIONS } from "../constant/activityActions.js";
 import { APPROVAL_STATUS, ROLES } from "../constant/index.js";
@@ -131,6 +131,12 @@ export const approveRequest = async (req, res) => {
             case `${ENTITIES.USER}:${ACTIONS.CREATE}`:
 
                 entityId = await executeCreateUser(connection, payload);
+
+                break;
+
+            case `${ENTITIES.USER}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateUser(connection, payload);
 
                 break;
 

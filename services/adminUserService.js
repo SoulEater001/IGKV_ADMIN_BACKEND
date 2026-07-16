@@ -1,5 +1,8 @@
+import { invalidateUserTokens } from '../utils/token.js'
+
 
 export const executeCreateUser = async (connection, data) => {
+
 
     const [[existing]] = await connection.query(
         `
@@ -70,5 +73,88 @@ export const executeDeleteUser = async (connection, userId) => {
     }
 
     return userId;
+
+};
+
+export const executeUpdateUser = async (
+    connection,
+    userData
+) => {
+
+    let sql = `
+        UPDATE admin_users
+        SET
+            name = ?,
+            email = ?,
+            is_active = ?
+    `;
+
+    const params = [
+        userData.name,
+        userData.email,
+        userData.is_active ? 1 : 0
+    ];
+
+    if (userData.password) {
+
+        sql += `, password = ?`;
+
+        params.push(userData.password);
+
+    }
+
+    sql += ` WHERE id = ?`;
+
+    params.push(userData.id);
+
+    await connection.query(sql, params);
+
+    await connection.query(
+        `
+        DELETE FROM user_roles
+        WHERE user_id = ?
+        `,
+        [userData.id]
+    );
+
+    const values = userData.role_ids.map(roleId => [
+        userData.id,
+        roleId
+    ]);
+
+    await connection.query(
+        `
+        INSERT INTO user_roles
+        (
+            user_id,
+            role_id
+        )
+        VALUES ?
+        `,
+        [values]
+    );
+
+    const newRoleIds = [...userData.role_ids]
+        .map(Number)
+        .sort((a, b) => a - b);
+
+    const rolesChanged =
+        JSON.stringify(userData.currentRoleIds) !==
+        JSON.stringify(newRoleIds);
+
+    const authorizationChanged =
+        rolesChanged ||
+        Boolean(userData.previousIsActive) !== Boolean(userData.is_active);
+
+    if (authorizationChanged) {
+
+        await invalidateUserTokens(
+            connection,
+            userData.id
+        );
+
+    }
+
+    return userData.id;
 
 };
