@@ -63,3 +63,28 @@ export const executeDeleteCategory = async (
     return categoryId;
 
 };
+
+export const executeUpdateCategory = async (
+    connection,
+    data
+) => {
+
+    const {id,
+        img_category_name
+    } = data;
+
+    await connection.query(
+        `
+        UPDATE imd_m_category
+        SET img_category_name = ?
+        WHERE id = ?
+        `,
+        [
+            img_category_name.trim(),
+            id
+        ]
+    );
+
+    return id;
+
+};

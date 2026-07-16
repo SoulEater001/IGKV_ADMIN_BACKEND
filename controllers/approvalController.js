@@ -6,7 +6,7 @@ import { APPROVAL_STATUS, ROLES } from "../constant/index.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { executeCreateRole, executeDeleteRole, executeUpdateRole } from "../services/roleService.js";
 import { executeCreatePermission, executeDeletePermission } from "../services/permissionService.js";
-import { executeCreateCategory, executeDeleteCategory } from "../services/categoryService.js";
+import { executeCreateCategory, executeDeleteCategory, executeUpdateCategory } from "../services/categoryService.js";
 import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType } from "../services/advisoryService.js";
 import { executeCreateCrop, executeDeleteCrop } from '../services/cropService.js'
 import { executeCreateZone, executeDeleteZone } from "../services/zoneService.js";
@@ -197,6 +197,15 @@ export const approveRequest = async (req, res) => {
             case `${ENTITIES.CATEGORY}:${ACTIONS.CREATE}`:
 
                 entityId = await executeCreateCategory(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.CATEGORY}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateCategory(
                     connection,
                     payload
                 );

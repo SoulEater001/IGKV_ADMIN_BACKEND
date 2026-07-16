@@ -4,7 +4,7 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { requiresApproval } from '../utils/approval.js'
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
-import { executeCreateCategory, executeDeleteCategory } from "../services/categoryService.js";
+import { executeCreateCategory, executeDeleteCategory, executeUpdateCategory } from "../services/categoryService.js";
 
 export const getCategories = async (req, res) => {
     try {
@@ -158,19 +158,22 @@ export const createCategory = async (req, res) => {
 };
 
 export const updateCategory = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
+        await connection.beginTransaction();
 
         const { id } = req.params;
         const { img_category_name } = req.body;
 
         if (!img_category_name?.trim()) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Category name is required."
             });
         }
 
-        const [rows] = await pool.query(
+        const [[category]] = await connection.query(
             `
             SELECT id, img_category_name
             FROM imd_m_category
@@ -179,48 +182,113 @@ export const updateCategory = async (req, res) => {
             [id]
         );
 
-        if (rows.length === 0) {
+        if (!category) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Category not found."
             });
         }
 
-        await pool.query(
+
+        const [[existing]] = await connection.query(
             `
-            UPDATE imd_m_category
-            SET img_category_name = ?
-            WHERE id = ?
+            SELECT id
+            FROM imd_m_category
+            WHERE LOWER(img_category_name) = LOWER(?)
+              AND id <> ?
             `,
             [
                 img_category_name.trim(),
                 id
             ]
         );
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.CATEGORY,
-            entityId: id,
-            description: `${req.user.name} updated category ${img_category_name.trim()}`,
-            ipAddress: req.ip
-        });
 
-        return res.status(200).json({
-            success: true,
-            message: "Category updated successfully."
-        });
+        if (existing) {
+            await connection.rollback();
+            return res.status(409).json({
+                success: false,
+                message: "Category already exists."
+            });
+        }
+        const categoryData = {
+            id: Number(id),
+            img_category_name: img_category_name.trim()
+        }
 
+        if (requiresApproval(req.user)) {
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.CATEGORY,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
+            );
+
+            if (pending) {
+                await connection.rollback();
+                return res.status(409).json({
+                    success: false,
+                    message: "A category update request is already pending approval."
+                });
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.CATEGORY,
+                action: ACTIONS.UPDATE,
+                recordId: Number(id),
+                payload: categoryData,
+                requestedBy: req.user.id
+            }
+            );
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entityId: Number(id),
+                entity: ENTITIES.CATEGORY,
+                description: `${req.user.name} requested update of category ${img_category_name.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(202).json({
+                success: true,
+                approvalRequired: true,
+                message: "Category update submitted for approval."
+            });
+        } else {
+            await executeUpdateCategory(
+                connection,
+                categoryData
+            );
+            await connection.commit();
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.CATEGORY,
+                entityId: id,
+                description: `${req.user.name} updated category ${img_category_name.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: false,
+                message: "Category updated successfully."
+            });
+        }
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         return res.status(500).json({
             success: false,
             message: "Failed to update category."
         });
 
-    }
+    } finally { connection.release(); }
 };
 
 export const deleteCategory = async (req, res) => {
@@ -351,7 +419,7 @@ export const deleteCategory = async (req, res) => {
 
             return res.status(200).json({
                 success: true,
-                message:"Category deleted successfully."
+                message: "Category deleted successfully."
             });
         }
     } catch (error) {
