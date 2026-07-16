@@ -4,7 +4,7 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { requiresApproval } from "../utils/approval.js";
-import { executeCreateBlock, executeDeleteBlock } from "../services/blockService.js";
+import { executeCreateBlock, executeDeleteBlock, executeUpdateBlock } from "../services/blockService.js";
 
 export const getBlocks = async (req, res) => {
     try {
@@ -184,7 +184,6 @@ export const getBlocksPaginated = async (req, res) => {
                 offset
             ]
         );
-        console.log(countResult.total / pageSize)
 
         return res.status(200).json({
             success: true,
@@ -291,6 +290,7 @@ export const createBlock = async (req, res) => {
             longitude = null
         } = req.body;
 
+
         if (!name_en?.trim() || !name_hi?.trim() || !district_id || !block_lg_code) {
             await connection.rollback();
             return res.status(400).json({
@@ -303,7 +303,7 @@ export const createBlock = async (req, res) => {
         const blockData = {
             name_en: name_en.trim(),
             name_hi: name_hi.trim(),
-            id: district_id,
+            district_id,
             block_lg_code,
             latitude,
             longitude
@@ -416,7 +416,7 @@ export const updateBlock = async (req, res) => {
 
         }
 
-        const [[block]] = await pool.query(
+        const [[block]] = await connection.query(
             `
             SELECT block_id,
             block_lg_code,
@@ -439,7 +439,7 @@ export const updateBlock = async (req, res) => {
 
         }
 
-        const [[existing]] = await pool.query(
+        const [[existing]] = await connection.query(
             `
             SELECT block_id
 
@@ -470,121 +470,85 @@ export const updateBlock = async (req, res) => {
             });
 
         }
+        const blockData = {
+            id: Number(id),
+            name_en: name_en.trim(),
+            name_hi: name_hi.trim(),
+            district_id,
+            block_lg_code,
+            latitude,
+            longitude
+        };
 
-        if (block.block_lg_code !== block_lg_code) {
+        if (requiresApproval(req.user)) {
 
-            await pool.query(
-                `
-                UPDATE imd_advisory_main
-                SET block_lg_code=?
-                WHERE block_lg_code=?
-                `,
-                [
-                    block_lg_code,
-                    block.block_lg_code
-                ]
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.BLOCK,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
             );
 
-            await pool.query(
-                `
-                UPDATE imd_advisory_detail
-                SET block_lg_code=?
-                WHERE block_lg_code=?
-                `,
-                [
-                    block_lg_code,
-                    block.block_lg_code
-                ]
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A block update request is already pending approval."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.BLOCK,
+                action: ACTIONS.UPDATE,
+                recordId: Number(id),
+                payload: blockData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.BLOCK,
+                entityId: Number(id),
+                description: `${req.user.name} requested update of block ${name_en.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(202).json({
+                success: true,
+                approvalRequired: true,
+                message: "Block update submitted for approval."
+            });
+
+        } else {
+            await executeUpdateBlock(
+                connection,
+                blockData,
+                req.user.id
             );
 
+            await connection.commit();
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.BLOCK,
+                entityId: id,
+                description: `${req.user.name} updated block ${name_en.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: error.message||"Block updated successfully."
+            });
         }
-
-        await pool.query(
-            `
-            UPDATE m_block
-
-            SET
-                name=?,
-                district_id=?,
-                block_lg_code=?,
-                latitude=?,
-                longitude=?,
-                modify_by = ?,
-                modify_datetime = NOW()
-
-            WHERE block_id=?
-            `,
-            [
-                name_en.trim(),
-                district_id,
-                block_lg_code,
-                latitude,
-                longitude,
-                req.user.id,
-                id
-            ]
-        );
-
-        await connection.query(
-            `
-            UPDATE m_block_language
-            SET
-                name = ?,
-                modify_by = ?,
-                modify_datetime = NOW()
-            WHERE
-                block_id = ?
-                AND language_id = 2
-                AND deleted IS NULL
-            `,
-            [
-                name_en.trim(),
-                req.user.id,
-                id
-            ]
-        );
-
-        await connection.query(
-            `
-            UPDATE m_block_language
-            SET
-                name = ?,
-                modify_by = ?,
-                 modify_datetime = NOW()
-            WHERE
-                block_id = ?
-                AND language_id = 1
-                AND deleted IS NULL
-            `,
-            [
-                name_hi.trim(),
-                req.user.id,
-                id
-            ]
-        );
-
-        await connection.commit();
-
-
-        const description =
-            block.block_lg_code === block_lg_code
-                ? `${req.user.name} updated block ${name_en.trim()}`
-                : `${req.user.name} updated block ${name_en.trim()} and changed its LG code`;
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.BLOCK,
-            entityId: id,
-            description,
-            ipAddress: req.ip
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "Block updated successfully."
-        });
-
     } catch (error) {
 
         console.error(error);

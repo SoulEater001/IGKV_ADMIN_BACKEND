@@ -29,7 +29,6 @@ export const executeCreateBlock = async (
             block_lg_code
         ]
     );
-    console.log(existing)
 
     if (existing) {
         throw new Error("Block already exists.");
@@ -127,5 +126,126 @@ export const executeDeleteBlock = async (
         ]
     );
     return blockId;
+
+};
+
+export const executeUpdateBlock = async (
+    connection,
+    data,
+    userId
+) => {
+
+    const {
+        id,
+        name_en,
+        name_hi,
+        district_id,
+        block_lg_code,
+        latitude = null,
+        longitude = null
+    } = data;
+
+    const [[block]] = await connection.query(
+        `
+        SELECT block_lg_code
+        FROM m_block
+        WHERE block_id = ?
+        `,
+        [id]
+    );
+
+    const oldLgCode = block.block_lg_code;
+
+    if (oldLgCode !== block_lg_code) {
+
+        await connection.query(
+            `
+            UPDATE imd_advisory_main
+            SET block_lg_code = ?
+            WHERE block_lg_code = ?
+            `,
+            [
+                block_lg_code,
+                oldLgCode
+            ]
+        );
+
+        await connection.query(
+            `
+            UPDATE imd_advisory_detail
+            SET block_lg_code = ?
+            WHERE block_lg_code = ?
+            `,
+            [
+                block_lg_code,
+                oldLgCode
+            ]
+        );
+
+    }
+
+    await connection.query(
+        `
+        UPDATE m_block
+        SET
+            name = ?,
+            district_id = ?,
+            block_lg_code = ?,
+            latitude = ?,
+            longitude = ?,
+            modify_by = ?,
+            modify_datetime = NOW()
+        WHERE block_id = ?
+        `,
+        [
+            name_en.trim(),
+            district_id,
+            block_lg_code,
+            latitude,
+            longitude,
+            userId,
+            id
+        ]
+    );
+
+    await connection.query(
+        `
+        UPDATE m_block_language
+        SET
+            name = ?,
+            modify_by = ?,
+            modify_datetime = NOW()
+        WHERE
+            block_id = ?
+            AND language_id = 2
+            AND deleted IS NULL
+        `,
+        [
+            name_en.trim(),
+            userId,
+            id
+        ]
+    );
+
+    await connection.query(
+        `
+        UPDATE m_block_language
+        SET
+            name = ?,
+            modify_by = ?,
+            modify_datetime = NOW()
+        WHERE
+            block_id = ?
+            AND language_id = 1
+            AND deleted IS NULL
+        `,
+        [
+            name_hi.trim(),
+            userId,
+            id
+        ]
+    );
+
+    return id;
 
 };

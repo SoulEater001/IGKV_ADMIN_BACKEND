@@ -128,3 +128,122 @@ export const executeDeleteDistrict = async (
     return districtId;
 
 };
+
+export const executeUpdateDistrict = async (
+    connection,
+    data,
+    userId
+) => {
+
+    const {
+        id,
+        name_en,
+        name_hi,
+        state_id,
+        zone_id,
+        district_lg_code
+    } = data;
+
+    const [[district]] = await connection.query(
+        `
+        SELECT district_lg_code
+        FROM m_district
+        WHERE district_id = ?
+        `,
+        [id]
+    );
+
+    const oldLgCode = district.district_lg_code;
+
+    await connection.query(
+        `
+        UPDATE m_district
+        SET
+            name = ?,
+            state_id = ?,
+            zone_id = ?,
+            district_lg_code = ?,
+            modify_by = ?
+        WHERE district_id = ?
+        `,
+        [
+            name_en.trim(),
+            state_id,
+            zone_id,
+            district_lg_code,
+            userId,
+            id
+        ]
+    );
+
+    await connection.query(
+        `
+        UPDATE m_district_language
+        SET
+            state_id = ?,
+            name = ?,
+            modify_by = ?
+        WHERE
+            district_id = ?
+            AND language_id = 2
+            AND deleted IS NULL
+        `,
+        [
+            state_id,
+            name_en.trim(),
+            userId,
+            id
+        ]
+    );
+
+    await connection.query(
+        `
+        UPDATE m_district_language
+        SET
+            state_id = ?,
+            name = ?,
+            modify_by = ?
+        WHERE
+            district_id = ?
+            AND language_id = 1
+            AND deleted IS NULL
+        `,
+        [
+            state_id,
+            name_hi.trim(),
+            userId,
+            id
+        ]
+    );
+
+    if (oldLgCode !== district_lg_code) {
+
+        await connection.query(
+            `
+            UPDATE imd_advisory_main
+            SET district_lg_code = ?
+            WHERE district_lg_code = ?
+            `,
+            [
+                district_lg_code,
+                oldLgCode
+            ]
+        );
+
+        await connection.query(
+            `
+            UPDATE imd_advisory_detail
+            SET district_lg_code = ?
+            WHERE district_lg_code = ?
+            `,
+            [
+                district_lg_code,
+                oldLgCode
+            ]
+        );
+
+    }
+
+    return id;
+
+};

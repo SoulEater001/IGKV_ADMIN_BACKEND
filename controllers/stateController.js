@@ -4,7 +4,7 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { requiresApproval } from "../utils/approval.js";
-import { executeCreateState, executeDeleteState } from "../services/stateService.js";
+import { executeCreateState, executeDeleteState, executeUpdateState } from "../services/stateService.js";
 
 export const getState = async (req, res) => {
     try {
@@ -441,111 +441,82 @@ export const updateState = async (req, res) => {
 
         }
 
-        const oldLgCode = state.state_lg_code;
+        const stateData = {
+            id: Number(id),
+            name_en: name_en.trim(),
+            name_hi: name_hi.trim(),
+            state_lg_code
+        };
 
-        await connection.query(
-            `
-            UPDATE m_state
-            SET
-                name = ?,
-                state_lg_code = ?,
-                modify_by = ?
-            WHERE state_id = ?
-            `,
+        if (requiresApproval(req.user)) {
 
-            [
-                name_en.trim(),
-                state_lg_code,
-                req.user.id,
-                id
-            ]
-        );
-
-        await connection.query(
-            `
-    UPDATE m_state_language
-    SET
-        name = ?,
-        modify_by = ?
-    WHERE
-        state_id = ?
-        AND language_id = 2
-        AND deleted IS NULL
-    `,
-            [
-                name_en.trim(),
-                req.user.id,
-                id
-            ]
-        );
-
-        await connection.query(
-            `
-    UPDATE m_state_language
-    SET
-        name = ?,
-        modify_by = ?
-    WHERE
-        state_id = ?
-        AND language_id = 1
-        AND deleted IS NULL
-    `,
-            [
-                name_hi.trim(),
-                req.user.id,
-                id
-            ]
-        );
-
-        if (oldLgCode !== state_lg_code) {
-
-            await connection.query(
-                `
-                UPDATE imd_advisory_main
-                SET state_lg_code = ?
-                WHERE state_lg_code = ?
-                `,
-                [
-                    state_lg_code,
-                    oldLgCode
-                ]
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.STATE,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
             );
 
-            await connection.query(
-                `
-                UPDATE imd_advisory_detail
-                SET state_lg_code = ?
-                WHERE state_lg_code = ?
-                `,
-                [
-                    state_lg_code,
-                    oldLgCode
-                ]
-            );
+            if (pending) {
 
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A state update request is already pending approval."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.STATE,
+                action: ACTIONS.UPDATE,
+                recordId: Number(id),
+                payload: stateData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.STATE,
+                entityId: Number(id),
+                description: `${req.user.name} requested update of state ${name_en.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(202).json({
+                success: true,
+                approvalRequired: true,
+                message: "State update submitted for approval."
+            });
+
+        } else {
+            await executeUpdateState(
+                connection,
+                stateData,
+                req.user.id
+            );
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.STATE,
+                entityId: id,
+                description: `${req.user.name} updated state ${name_en.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "State updated successfully."
+            });
         }
-
-        await connection.commit();
-
-        const description =
-            oldLgCode === state_lg_code
-                ? `${req.user.name} updated state ${name_en.trim()}`
-                : `${req.user.name} updated state ${name_en.trim()} and changed its LG code`;
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.STATE,
-            entityId: id,
-            description,
-            ipAddress: req.ip
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "State updated successfully."
-        });
-
     } catch (error) {
 
         await connection.rollback();
@@ -554,7 +525,7 @@ export const updateState = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: "Failed to update state."
+            message: error.message||"Failed to update state."
         });
 
     } finally {

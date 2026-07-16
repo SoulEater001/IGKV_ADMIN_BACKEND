@@ -4,7 +4,7 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { requiresApproval } from "../utils/approval.js";
-import { executeCreateDistrict, executeDeleteDistrict } from "../services/districtService.js";
+import { executeCreateDistrict, executeDeleteDistrict, executeUpdateDistrict } from "../services/districtService.js";
 
 export const getDistrictsPaginated = async (req, res) => {
     try {
@@ -485,118 +485,84 @@ export const updateDistrict = async (req, res) => {
 
         }
 
-        const oldLgCode = district.district_lg_code;
+        const districtData = {
+            id: Number(id),
+            name_en: name_en.trim(),
+            name_hi: name_hi.trim(),
+            state_id,
+            zone_id,
+            district_lg_code
+        };
 
-        await connection.query(
-            `
-            UPDATE m_district
-            SET
-                name=?,
-                state_id=?,
-                zone_id=?,
-                district_lg_code=?,
-                modify_by = ?
-            WHERE district_id=?
-            `,
-            [
-                name_en.trim(),
-                String(state_id),
-                zone_id,
-                district_lg_code,
-                req.user.id,
-                id
-            ]
-        );
+        if (requiresApproval(req.user)) {
 
-        await connection.query(
-            `
-            UPDATE m_district_language
-            SET
-                state_id = ?,
-                name = ?,
-                modify_by = ?
-            WHERE
-                district_id = ?
-                AND language_id = 2
-                AND deleted IS NULL
-            `,
-            [
-                state_id,
-                name_en.trim(),
-                req.user.id,
-                id
-            ]
-        );
-
-        await connection.query(
-            `
-            UPDATE m_district_language
-            SET
-                state_id = ?,
-                name = ?,
-                modify_by = ?
-            WHERE
-                district_id = ?
-                AND language_id = 1
-                AND deleted IS NULL
-            `,
-            [
-                state_id,
-                name_hi.trim(),
-                req.user.id,
-                id
-            ]
-        );
-
-        if (oldLgCode !== district_lg_code) {
-
-            await connection.query(
-                `
-                UPDATE imd_advisory_main
-                SET district_lg_code=?
-                WHERE district_lg_code=?
-                `,
-                [
-                    district_lg_code,
-                    oldLgCode
-                ]
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.DISTRICT,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
             );
 
-            await connection.query(
-                `
-                UPDATE imd_advisory_detail
-                SET district_lg_code=?
-                WHERE district_lg_code=?
-                `,
-                [
-                    district_lg_code,
-                    oldLgCode
-                ]
-            );
+            if (pending) {
 
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A district update request is already pending approval."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.DISTRICT,
+                action: ACTIONS.UPDATE,
+                recordId: Number(id),
+                payload: districtData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.DISTRICT,
+                entityId: Number(id),
+                description: `${req.user.name} requested update of district ${name_en.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(202).json({
+                success: true,
+                approvalRequired: true,
+                message: "District update submitted for approval."
+            });
+
+        } else {
+            await executeUpdateDistrict(
+                connection,
+                districtData,
+                req.user.id
+            );
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.DISTRICT,
+                entityId: id,
+                description: `${req.user.name} updated district ${name_en.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "District updated successfully."
+            });
         }
-
-        await connection.commit();
-
-        const description =
-            oldLgCode === district_lg_code
-                ? `${req.user.name} updated district ${name_en.trim()}`
-                : `${req.user.name} updated district ${name_en.trim()} and changed its LG code`;
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.DISTRICT,
-            entityId: id,
-            description,
-            ipAddress: req.ip
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "District updated successfully."
-        });
-
     } catch (error) {
 
         await connection.rollback();

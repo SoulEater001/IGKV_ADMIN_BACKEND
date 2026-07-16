@@ -4,7 +4,7 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { requiresApproval } from '../utils/approval.js'
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
-import { executeCreateZone, executeDeleteZone } from "../services/zoneService.js";
+import { executeCreateZone, executeDeleteZone, executeUpdateZone } from "../services/zoneService.js";
 
 export const getZones = async (req, res) => {
     try {
@@ -293,87 +293,90 @@ export const updateZone = async (req, res) => {
             });
         }
 
-        await connection.query(
-            `
-            UPDATE m_zone
-            SET
-                name = ?,
-                state_id = ?,
-                Image_Path = ?,
-                modify_by = ?
-            WHERE Zone_id = ?
-            `,
-            [
-                name_en.trim(),
-                state_id,
-                imagePath,
-                req.user.id,
-                id
-            ]
-        );
+        const zoneData = {
+            id: Number(id),
+            name_en: name_en.trim(),
+            name_hi: name_hi.trim(),
+            state_id,
+            imagePath
+        };
 
-        await connection.query(
-            `
-            UPDATE m_zone_language
-            SET
-                name = ?,
-                state_id = ?,
-                modify_by = ?
-            WHERE
-                zone_id = ?
-                AND language_id = 2
-                AND deleted IS NULL
-            `,
-            [
-                name_en.trim(),
-                state_id,
-                req.user.id,
-                id
-            ]
-        );
+        if (requiresApproval(req.user)) {
 
-        await connection.query(
-            `
-            UPDATE m_zone_language
-            SET
-                name = ?,
-                state_id = ?,
-                modify_by = ?
-            WHERE
-                zone_id = ?
-                AND language_id = 1
-                AND deleted IS NULL
-            `,
-            [
-                name_hi.trim(),
-                state_id,
-                req.user.id,
-                id
-            ]
-        );
-        await connection.commit();
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.ZONE,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
+            );
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.ZONE,
-            entityId: id,
-            description: `${req.user.name} updated zone ${name_en.trim()}`,
-            ipAddress: req.ip
-        });
+            if (pending) {
 
-        return res.status(200).json({
-            success: true,
-            message: "Zone updated successfully."
-        });
+                await connection.rollback();
 
+                return res.status(409).json({
+                    success: false,
+                    message: "A zone update request is already pending approval."
+                });
+
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.ZONE,
+                action: ACTIONS.UPDATE,
+                recordId: Number(id),
+                payload: zoneData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.ZONE,
+                entityId: Number(id),
+                description: `${req.user.name} requested update of zone ${name_en.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(202).json({
+                success: true,
+                approvalRequired: true,
+                message: "Zone update submitted for approval."
+            });
+
+        } else {
+            await executeUpdateZone(
+                connection,
+                zoneData,
+                req.user.id
+            );
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.ZONE,
+                entityId: Number(id),
+                description: `${req.user.name} updated zone ${name_en.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "Zone updated successfully."
+            });
+        }
     } catch (error) {
 
         console.error(error);
         await connection.rollback();
         return res.status(500).json({
             success: false,
-            message: "Failed to update zone."
+            message: error.message||"Failed to update zone."
         });
 
     } finally {
@@ -520,7 +523,7 @@ export const deleteZone = async (req, res) => {
             success: false,
             message: "Failed to delete zone.",
         });
-    }finally {
+    } finally {
 
         connection.release();
 

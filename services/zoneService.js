@@ -97,3 +97,80 @@ export const executeDeleteZone = async (
     );
 
 };
+
+export const executeUpdateZone = async (
+    connection,
+    data,
+    userId
+) => {
+
+    const {
+        id,
+        name_en,
+        name_hi,
+        state_id,
+        imagePath = null
+    } = data;
+
+    await connection.query(
+        `
+        UPDATE m_zone
+        SET
+            name = ?,
+            state_id = ?,
+            Image_Path = ?,
+            modify_by = ?
+        WHERE Zone_id = ?
+        `,
+        [
+            name_en.trim(),
+            state_id,
+            imagePath,
+            userId,
+            id
+        ]
+    );
+
+    await connection.query(
+        `
+        UPDATE m_zone_language
+        SET
+            name = ?,
+            state_id = ?,
+            modify_by = ?
+        WHERE
+            zone_id = ?
+            AND language_id = 2
+            AND deleted IS NULL
+        `,
+        [
+            name_en.trim(),
+            state_id,
+            userId,
+            id
+        ]
+    );
+
+    await connection.query(
+        `
+        UPDATE m_zone_language
+        SET
+            name = ?,
+            state_id = ?,
+            modify_by = ?
+        WHERE
+            zone_id = ?
+            AND language_id = 1
+            AND deleted IS NULL
+        `,
+        [
+            name_hi.trim(),
+            state_id,
+            userId,
+            id
+        ]
+    );
+
+    return id;
+
+};

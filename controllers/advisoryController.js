@@ -18,7 +18,7 @@ export const getAdvisoriesPaginated = async (req, res) => {
             page = 1,
             limit = 10,
         } = req.query;
-        console.log(search)
+
         if (!stateLgCode || !districtLgCode || !blockLgCode || !languageId) {
             return res.status(400).json({
                 success: false,

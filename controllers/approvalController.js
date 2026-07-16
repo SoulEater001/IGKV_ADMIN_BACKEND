@@ -9,10 +9,10 @@ import { executeCreatePermission, executeDeletePermission } from "../services/pe
 import { executeCreateCategory, executeDeleteCategory, executeUpdateCategory } from "../services/categoryService.js";
 import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType, executeUpdateAdvisory, executeUpdateAdvisoryType } from "../services/advisoryService.js";
 import { executeCreateCrop, executeDeleteCrop, executeUpdateCrop } from '../services/cropService.js'
-import { executeCreateZone, executeDeleteZone } from "../services/zoneService.js";
-import { executeCreateState, executeDeleteState } from "../services/stateService.js";
-import { executeCreateDistrict, executeDeleteDistrict } from "../services/districtService.js";
-import { executeCreateBlock, executeDeleteBlock } from "../services/blockService.js";
+import { executeCreateZone, executeDeleteZone, executeUpdateZone } from "../services/zoneService.js";
+import { executeCreateState, executeDeleteState, executeUpdateState } from "../services/stateService.js";
+import { executeCreateDistrict, executeDeleteDistrict, executeUpdateDistrict } from "../services/districtService.js";
+import { executeCreateBlock, executeDeleteBlock, executeUpdateBlock } from "../services/blockService.js";
 
 export const getApprovalRequests = async (req, res) => {
     try {
@@ -311,6 +311,17 @@ export const approveRequest = async (req, res) => {
                 );
 
                 break;
+
+            case `${ENTITIES.ZONE}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateZone(
+                    connection,
+                    payload,
+                    request.requested_by
+                );
+
+                break;
+
             case `${ENTITIES.ZONE}:${ACTIONS.DELETE}`:
 
                 entityId = await executeDeleteZone(
@@ -330,6 +341,17 @@ export const approveRequest = async (req, res) => {
                 );
 
                 break;
+
+            case `${ENTITIES.STATE}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateState(
+                    connection,
+                    payload,
+                    request.requested_by
+                );
+
+                break;
+
             case `${ENTITIES.STATE}:${ACTIONS.DELETE}`:
 
                 entityId = await executeDeleteState(
@@ -350,6 +372,16 @@ export const approveRequest = async (req, res) => {
 
                 break;
 
+            case `${ENTITIES.DISTRICT}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateDistrict(
+                    connection,
+                    payload,
+                    request.requested_by
+                );
+
+                break;
+
             case `${ENTITIES.DISTRICT}:${ACTIONS.DELETE}`:
 
                 entityId = await executeDeleteDistrict(
@@ -363,6 +395,16 @@ export const approveRequest = async (req, res) => {
             case `${ENTITIES.BLOCK}:${ACTIONS.CREATE}`:
 
                 entityId = await executeCreateBlock(
+                    connection,
+                    payload,
+                    request.requested_by
+                );
+
+                break;
+
+            case `${ENTITIES.BLOCK}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateBlock(
                     connection,
                     payload,
                     request.requested_by
