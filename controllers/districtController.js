@@ -6,47 +6,6 @@ import { createApprovalRequest, hasPendingApproval } from "../services/approvalS
 import { requiresApproval } from "../utils/approval.js";
 import { executeCreateDistrict, executeDeleteDistrict } from "../services/districtService.js";
 
-export const getDistrictsByZone = async (req, res) => {
-    try {
-        const { zoneId } = req.query;
-
-        if (!zoneId) {
-            return res.status(400).json({
-                success: false,
-                message: "zoneId is required.",
-            });
-        }
-
-        const [rows] = await pool.query(
-            `
-            SELECT
-                district_id,
-                name,
-                state_id,
-                district_lg_code
-            FROM m_district
-            WHERE zone_id = ?
-              AND deleted IS NULL
-            ORDER BY name ASC
-            `,
-            [zoneId]
-        );
-
-        return res.status(200).json({
-            success: true,
-            count: rows.length,
-            data: rows,
-        });
-    } catch (error) {
-        console.error("Error fetching districts:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch districts.",
-        });
-    }
-};
-
 export const getDistrictsPaginated = async (req, res) => {
     try {
 
@@ -66,15 +25,15 @@ export const getDistrictsPaginated = async (req, res) => {
         let where = `
             WHERE d.deleted IS NULL
         `;
-        
+
         const params = [];
 
-        if(stateId){
+        if (stateId) {
             where += `
         AND d.state_id = ?
          `;
 
-    params.push(Number(stateId));
+            params.push(Number(stateId));
         }
 
 
@@ -106,7 +65,7 @@ export const getDistrictsPaginated = async (req, res) => {
 
         }
 
-         const [[countResult]] = await pool.query(
+        const [[countResult]] = await pool.query(
             `
             SELECT COUNT(*) AS total
 
@@ -133,7 +92,7 @@ export const getDistrictsPaginated = async (req, res) => {
             params
         );
 
-       const [rows] = await pool.query(
+        const [rows] = await pool.query(
             `
             SELECT
                 d.district_id,
@@ -208,16 +167,35 @@ export const getDistrictsPaginated = async (req, res) => {
 
 export const getDistricts = async (req, res) => {
     try {
+        const { stateId, zoneId } = req.query;
 
-        const [rows] = await pool.query(`
+        let where = `WHERE deleted IS NULL`;
+        const params = [];
+
+        if (stateId) {
+            where += ` AND state_id = ?`;
+            params.push(stateId);
+        }
+
+        if (zoneId) {
+            where += ` AND zone_id = ?`;
+            params.push(zoneId);
+        }
+
+        const [rows] = await pool.query(
+            `
             SELECT
                 district_id,
                 name,
-                state_id
+                state_id,
+                district_lg_code,
+                zone_id
             FROM m_district
-            WHERE deleted IS NULL
+            ${where}
             ORDER BY name ASC
-        `);
+            `,
+            params
+        );
 
         return res.status(200).json({
             success: true,

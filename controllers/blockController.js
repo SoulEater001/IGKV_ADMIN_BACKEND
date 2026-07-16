@@ -6,44 +6,56 @@ import { createApprovalRequest, hasPendingApproval } from "../services/approvalS
 import { requiresApproval } from "../utils/approval.js";
 import { executeCreateBlock, executeDeleteBlock } from "../services/blockService.js";
 
-export const getBlocksByDistrict = async (req, res) => {
+export const getBlocks = async (req, res) => {
     try {
+
         const { districtId } = req.query;
 
-        if (!districtId) {
-            return res.status(400).json({
-                success: false,
-                message: "districtId is required."
-            });
+        let where = `WHERE b.deleted IS NULL`;
+
+        const params = [];
+
+
+        if (districtId) {
+            where += ` AND b.district_id = ?`;
+            params.push(districtId);
         }
 
         const [rows] = await pool.query(
             `
             SELECT
-                block_id,
-                name,
-                block_lg_code
-            FROM m_block
-            WHERE district_id = ?
-              AND deleted IS NULL
-            ORDER BY name ASC
+                b.block_id,
+                b.name,
+                b.district_id,
+                d.state_id,
+                b.block_lg_code
+            FROM m_block b
+
+            INNER JOIN m_district d
+                ON d.district_id = b.district_id
+
+            ${where}
+
+            ORDER BY b.name ASC
             `,
-            [districtId]
+            params
         );
 
         return res.status(200).json({
             success: true,
-            data: rows,
-            count: rows.length
+            count: rows.length,
+            data: rows
         });
 
     } catch (error) {
-        console.error("Error fetching blocks:", error);
+
+        console.error(error);
 
         return res.status(500).json({
             success: false,
-            message: "Failed to fetch blocks.",
+            message: "Failed to fetch blocks."
         });
+
     }
 };
 

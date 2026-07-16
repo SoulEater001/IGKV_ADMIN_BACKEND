@@ -1,11 +1,10 @@
 import express from "express";
-import { getDistrictsByZone, getDistrictById, createDistrict, updateDistrict, deleteDistrict, getDistricts, getDistrictsPaginated } from "../controllers/districtController.js";
+import {getDistrictById, createDistrict, updateDistrict, deleteDistrict, getDistricts, getDistrictsPaginated } from "../controllers/districtController.js";
 import { authenticate } from "../middleware/authMiddleware.js";
 
 
 const router = express.Router();
 
-router.get("/by-zone", getDistrictsByZone);
 router.get("/paginated", getDistrictsPaginated);
 router.get("/", getDistricts);
 
