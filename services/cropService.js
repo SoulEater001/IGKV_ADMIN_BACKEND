@@ -66,3 +66,36 @@ export const executeDeleteCrop = async (connection, cropId) => {
     return cropId;
 
 };
+
+export const executeUpdateCrop = async (
+    connection,
+    data
+) => {
+
+    const {
+        id,
+        imd_crop_name,
+        imd_crop_name_h,
+        imd_category_id
+    } = data;
+
+    await connection.query(
+        `
+        UPDATE imd_m_crop
+        SET
+            imd_crop_name = ?,
+            imd_crop_name_h = ?,
+            imd_category_id = ?
+        WHERE id = ?
+        `,
+        [
+            imd_crop_name.trim(),
+            imd_crop_name_h?.trim() || null,
+            imd_category_id || null,
+            id
+        ]
+    );
+
+    return id;
+
+};

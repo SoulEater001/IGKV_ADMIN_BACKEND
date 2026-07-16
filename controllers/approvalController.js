@@ -8,7 +8,7 @@ import { executeCreateRole, executeDeleteRole, executeUpdateRole } from "../serv
 import { executeCreatePermission, executeDeletePermission } from "../services/permissionService.js";
 import { executeCreateCategory, executeDeleteCategory, executeUpdateCategory } from "../services/categoryService.js";
 import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType, executeUpdateAdvisoryType } from "../services/advisoryService.js";
-import { executeCreateCrop, executeDeleteCrop } from '../services/cropService.js'
+import { executeCreateCrop, executeDeleteCrop, executeUpdateCrop } from '../services/cropService.js'
 import { executeCreateZone, executeDeleteZone } from "../services/zoneService.js";
 import { executeCreateState, executeDeleteState } from "../services/stateService.js";
 import { executeCreateDistrict, executeDeleteDistrict } from "../services/districtService.js";
@@ -256,6 +256,16 @@ export const approveRequest = async (req, res) => {
                 );
 
                 break;
+
+            case `${ENTITIES.CROP}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateCrop(
+                    connection,
+                    payload
+                );
+
+                break;
+
             case `${ENTITIES.CROP}:${ACTIONS.DELETE}`:
 
                 entityId = await executeDeleteCrop(

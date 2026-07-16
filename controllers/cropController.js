@@ -4,7 +4,7 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { requiresApproval } from '../utils/approval.js'
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
-import { executeDeleteCrop, executeCreateCrop } from "../services/cropService.js";
+import { executeDeleteCrop, executeCreateCrop, executeUpdateCrop } from "../services/cropService.js";
 
 export const getCropsPaginated = async (req, res) => {
     try {
@@ -239,8 +239,9 @@ export const createCrop = async (req, res) => {
 };
 
 export const updateCrop = async (req, res) => {
+    const connection = await pool.getConnection();
     try {
-
+        await connection.beginTransaction();
         const { id } = req.params;
 
         const {
@@ -250,13 +251,14 @@ export const updateCrop = async (req, res) => {
         } = req.body;
 
         if (!imd_crop_name?.trim()) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Crop name is required."
             });
         }
 
-        const [rows] = await pool.query(
+        const [[crop]] = await connection.query(
             `
             SELECT id, imd_crop_name
             FROM imd_m_crop
@@ -265,53 +267,131 @@ export const updateCrop = async (req, res) => {
             [id]
         );
 
-        if (rows.length === 0) {
+        if (!crop) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Crop not found."
             });
         }
 
-        await pool.query(
+        const [[existing]] = await connection.query(
             `
-            UPDATE imd_m_crop
-            SET
-                imd_crop_name = ?,
-                imd_crop_name_h = ?,
-                imd_category_id = ?
-            WHERE id = ?
+            SELECT id
+            FROM imd_m_crop
+            WHERE LOWER(imd_crop_name) = LOWER(?)
+              AND id <> ?
             `,
             [
                 imd_crop_name.trim(),
-                imd_crop_name_h?.trim() || null,
-                imd_category_id || null,
                 id
             ]
         );
 
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.CROP,
-            entityId: id,
-            description: `${req.user.name} updated crop ${imd_crop_name.trim()}`,
-            ipAddress: req.ip
-        });
+        if (existing) {
 
-        return res.status(200).json({
-            success: true,
-            message: "Crop updated successfully."
-        });
+            await connection.rollback();
 
+            return res.status(409).json({
+                success: false,
+                message: "Crop already exists."
+            });
+
+        }
+
+        const cropData = {
+
+            id: Number(id),
+
+            imd_crop_name: imd_crop_name.trim(),
+
+            imd_crop_name_h:
+                imd_crop_name_h?.trim() || null,
+
+            imd_category_id:
+                imd_category_id || null
+
+        };
+
+        if (requiresApproval(req.user)) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.CROP,
+                ACTIONS.UPDATE,
+                {
+                    id: Number(id)
+                }
+            );
+
+            if (pending) {
+
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "A crop update request is already pending."
+                });
+
+            }
+
+            await createApprovalRequest(
+                connection,
+                {
+                    resource: ENTITIES.CROP,
+                    action: ACTIONS.UPDATE,
+                    recordId: Number(id),
+                    payload: cropData,
+                    requestedBy: req.user.id
+                }
+            );
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.CROP,
+                entityId: Number(id),
+                description: `${req.user.name} requested update of crop ${imd_crop_name.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(202).json({
+                success: true,
+                approvalRequired: true,
+                message: "Crop update submitted for approval."
+            });
+
+        } else {
+            executeUpdateCrop(connection, cropData);
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.CROP,
+                entityId: id,
+                description: `${req.user.name} updated crop ${imd_crop_name.trim()}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "Crop updated successfully."
+            });
+        }
     } catch (error) {
-
+        await connection.rollback();
         console.error(error);
 
         return res.status(500).json({
             success: false,
-            message: "Failed to update crop."
+            message: error.message || "Failed to update crop."
         });
 
+    } finally {
+        connection.release();
     }
 };
 
