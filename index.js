@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from 'express';
 import cors from 'cors';
+import cookieParser from "cookie-parser";
 import { pool } from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import zoneRoutes from './routes/zoneRoutes.js';
@@ -21,7 +22,12 @@ const PORT = process.env.PORT;
 const app = express();
 
 app.set("trust proxy", true);
-app.use(cors());
+
+app.use(cookieParser());
+app.use(cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true
+}));
 app.use(express.json());
 
 app.get('/', (req, res) => {

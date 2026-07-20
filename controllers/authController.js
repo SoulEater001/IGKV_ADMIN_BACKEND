@@ -1,8 +1,10 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { pool } from "../config/db.js";
-import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
+import { generateAccessToken, generateRefreshToken, REFRESH_TOKEN_MAX_AGE, REFRESH_COOKIE_OPTIONS } from "../utils/jwt.js";
 import { logActivity } from "../utils/activityLogger.js";
+import crypto from "crypto";
+import { getAuthenticatedUser } from "../utils/authUser.js";
 
 export const signup = async (req, res) => {
     try {
@@ -94,64 +96,48 @@ export const login = async (req, res) => {
             });
         }
 
-        const [roleRows] = await pool.query(
-            `
-    SELECT r.name
-    FROM user_roles ur
-    JOIN roles r
-        ON ur.role_id = r.id
-    WHERE ur.user_id = ?
-    `,
-            [user.id]
-        );
-
-        const roles = roleRows.map(role => role.name);
-
-        const [permissionRows] = await pool.query(
-            `
-    SELECT
-        p.resource,
-        p.action
-
-    FROM user_roles ur
-
-    JOIN role_permissions rp
-        ON ur.role_id = rp.role_id
-
-    JOIN permissions p
-        ON rp.permission_id = p.id
-
-    WHERE ur.user_id = ?
-    `,
-            [user.id]
-        );
-        const permissions = [
-            ...new Set(
-                permissionRows.map(
-                    permission => `${permission.resource}:${permission.action}`
-                )
-            )
-        ];
-
         const payload = {
             id: user.id,
             name: user.name,
             email: user.email,
-            roles,
-            permissions,
             tokenVersion: user.token_version
         };
 
         const accessToken = generateAccessToken(payload);
+        const refreshToken = generateRefreshToken(payload);
+        const refreshTokenHash = crypto
+            .createHash("sha256")
+            .update(refreshToken)
+            .digest("hex");
 
-        // const refreshToken = generateRefreshToken(payload);
+        const decoded = jwt.verify(
+            refreshToken,
+            process.env.JWT_REFRESH_SECRET
+        );
+
+        const expiresAt = new Date(decoded.exp * 1000);
+
+        await pool.query(
+            `
+    INSERT INTO refresh_tokens
+    (
+        user_id,
+        token_hash,
+        expires_at
+    )
+    VALUES (?, ?, ?)
+    `,
+            [
+                user.id,
+                refreshTokenHash,
+                expiresAt
+            ]
+        );
 
         const userResponse = {
             id: user.id,
             name: user.name,
             email: user.email,
-            roles,
-            permissions,
             tokenVersion: user.token_version
         };
 
@@ -164,11 +150,11 @@ export const login = async (req, res) => {
             ipAddress: req.ip
         });
 
+        res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTIONS);
+
         return res.status(200).json({
             success: true,
-            message: "Login successful.",
             accessToken,
-            // refreshToken,
             user: userResponse
         });
 
@@ -202,20 +188,261 @@ export const me = async (req, res) => {
     }
 };
 
+export const refresh = async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        console.log("Refresh endpoint called")
+        await connection.beginTransaction();
+        const refreshToken = req.cookies.refreshToken;
+
+        if (!refreshToken) {
+            await connection.rollback();
+            res.clearCookie(
+                "refreshToken",
+                REFRESH_COOKIE_OPTIONS
+            );
+            return res.status(401).json({
+                success: false,
+                message: "Refresh token is required."
+            });
+        }
+
+        // Verify JWT
+        const decoded = jwt.verify(
+            refreshToken,
+            process.env.JWT_REFRESH_SECRET
+        );
+        if (decoded.type !== "refresh") {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid refresh token."
+            });
+        }
+
+        // Hash refresh token
+        const refreshTokenHash = crypto
+            .createHash("sha256")
+            .update(refreshToken)
+            .digest("hex");
+
+        // Find stored token
+        const [[storedToken]] = await connection.query(
+            `
+            SELECT
+                id,
+                user_id,
+                expires_at,
+                revoked_at
+            FROM refresh_tokens
+            WHERE token_hash = ?
+            `,
+            [refreshTokenHash]
+        );
+
+        if (!storedToken) {
+            await connection.rollback();
+            res.clearCookie(
+                "refreshToken",
+                REFRESH_COOKIE_OPTIONS
+            );
+            return res.status(401).json({
+                success: false,
+                message: "Invalid refresh token."
+            });
+        }
+
+        if (storedToken.revoked_at) {
+            await connection.rollback();
+            res.clearCookie(
+                "refreshToken",
+                REFRESH_COOKIE_OPTIONS
+            );
+            return res.status(401).json({
+                success: false,
+                message: "Refresh token has been revoked."
+            });
+        }
+
+        if (new Date(storedToken.expires_at) < new Date()) {
+            await connection.rollback();
+            res.clearCookie(
+                "refreshToken",
+                REFRESH_COOKIE_OPTIONS
+            );
+            return res.status(401).json({
+                success: false,
+                message: "Refresh token has expired."
+            });
+        }
+
+        const user = await getAuthenticatedUser(
+            connection,
+            storedToken.user_id
+        );
+
+        if (!user) {
+            await connection.rollback();
+            res.clearCookie(
+                "refreshToken",
+                REFRESH_COOKIE_OPTIONS
+            );
+            return res.status(401).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        if (!user.isActive) {
+            await connection.rollback();
+            res.clearCookie(
+                "refreshToken",
+                REFRESH_COOKIE_OPTIONS
+            );
+            return res.status(403).json({
+                success: false,
+                message: "Account is inactive."
+            });
+        }
+
+        if (user.tokenVersion !== decoded.tokenVersion) {
+            await connection.rollback();
+            res.clearCookie(
+                "refreshToken",
+                REFRESH_COOKIE_OPTIONS
+            );
+            return res.status(401).json({
+                success: false,
+                message: "Session expired. Please login again."
+            });
+        }
+
+        // Rotate refresh token
+        await connection.query(
+            `
+            DELETE
+            FROM refresh_tokens
+            WHERE id = ?
+            `,
+            [storedToken.id]
+        );
+
+        const payload = {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            tokenVersion: user.tokenVersion
+        };
+
+        const newAccessToken = generateAccessToken(payload);
+
+        const newRefreshToken = generateRefreshToken(payload);
+
+        const newRefreshTokenHash = crypto
+            .createHash("sha256")
+            .update(newRefreshToken)
+            .digest("hex");
+
+        res.cookie("refreshToken", newRefreshToken, REFRESH_COOKIE_OPTIONS);
+
+        const { exp } = jwt.decode(newRefreshToken);
+
+        await connection.query(
+            `
+            INSERT INTO refresh_tokens
+            (
+                user_id,
+                token_hash,
+                expires_at
+            )
+            VALUES (?, ?, ?)
+            `,
+            [
+                user.id,
+                newRefreshTokenHash,
+                new Date(exp * 1000)
+            ]
+        );
+        await connection.commit();
+
+        return res.status(200).json({
+            success: true,
+            accessToken: newAccessToken,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                roles: user.roles,
+                permissions: user.permissions
+            }
+        });
+
+    } catch (error) {
+        await connection.rollback();
+        res.clearCookie(
+            "refreshToken",
+            REFRESH_COOKIE_OPTIONS
+        );
+        return res.status(401).json({
+            success: false,
+            // message: error.message
+            message: "Invalid or expired refresh token."
+        });
+
+    } finally {
+        connection.release();
+    }
+};
+
 export const logout = async (req, res) => {
+    try {
 
-    await logActivity({
-        userId: req.user.id,
-        action: "LOGOUT",
-        entity: "Admin_User",
-        entityId: req.user.id,
-        description: `${req.user.name} logged out`,
-        ipAddress: req.ip
-    });
+        const refreshToken = req.cookies.refreshToken;
 
-    return res.status(200).json({
-        success: true,
-        message: "Logout successful."
-    });
+        if (refreshToken) {
 
+            const refreshTokenHash = crypto
+                .createHash("sha256")
+                .update(refreshToken)
+                .digest("hex");
+
+            await pool.query(
+                `
+                DELETE
+                FROM refresh_tokens
+                WHERE token_hash = ?
+                `,
+                [refreshTokenHash]
+            );
+
+        }
+
+        res.clearCookie(
+            "refreshToken",
+            REFRESH_COOKIE_OPTIONS
+        );
+
+        await logActivity({
+            userId: req.user.id,
+            action: "LOGOUT",
+            entity: "Admin_User",
+            entityId: req.user.id,
+            description: `${req.user.name} logged out`,
+            ipAddress: req.ip
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Logout successful."
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to logout."
+        });
+
+    }
 };

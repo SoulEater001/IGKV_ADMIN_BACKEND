@@ -9,6 +9,14 @@ export const invalidateUserTokens = async (connection, userId) => {
         `,
         [userId]
     );
+    await connection.query(
+        `
+        DELETE
+        FROM refresh_tokens
+        WHERE user_id = ?
+        `,
+        [userId]
+    );
 };
 
 export const invalidateRoleUsers = async (connection, roleId) => {
@@ -20,6 +28,18 @@ export const invalidateRoleUsers = async (connection, roleId) => {
             ON u.id = ur.user_id
 
         SET u.token_version = u.token_version + 1
+
+        WHERE ur.role_id = ?
+        `,
+        [roleId]
+    );
+    await connection.query(
+        `
+        DELETE rt
+        FROM refresh_tokens rt
+
+        JOIN user_roles ur
+            ON rt.user_id = ur.user_id
 
         WHERE ur.role_id = ?
         `,
