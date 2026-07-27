@@ -111,3 +111,4 @@ public/uploads/
 # Misc
 # ==========================
 *.tgz
+*.pem
