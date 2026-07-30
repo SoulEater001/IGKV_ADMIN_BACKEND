@@ -14,6 +14,9 @@ export const getAdvisoriesPaginated = async (req, res) => {
             stateLgCode,
             districtLgCode,
             blockLgCode,
+            categoryId,
+            cropId,
+            advisoryTypeId,
             languageId,
             fromDate,
             toDate,
@@ -43,10 +46,10 @@ export const getAdvisoriesPaginated = async (req, res) => {
 
         }
 
-        if (!stateLgCode || !districtLgCode || !blockLgCode || !languageId) {
+        if (!stateLgCode  || !languageId) {
             return res.status(400).json({
                 success: false,
-                message: "stateLgCode, districtLgCode, blockLgCode and languageId are required.",
+                message: "State and language is required.",
             });
         }
 
@@ -54,18 +57,43 @@ export const getAdvisoriesPaginated = async (req, res) => {
         const pageSize = Number(limit);
         const offset = (pageNumber - 1) * pageSize;
         const where = [
-            "d.state_lg_code = ?",
-            "d.district_lg_code = ?",
-            "d.block_lg_code = ?",
             "d.language_id = ?",
         ];
 
         const params = [
-            stateLgCode,
-            districtLgCode,
-            blockLgCode,
             languageId
         ];
+
+        if (stateLgCode) {
+            where.push("d.state_lg_code = ?");
+            params.push(stateLgCode);
+        }
+
+        if (districtLgCode) {
+            where.push("d.district_lg_code = ?");
+            params.push(districtLgCode);
+        }
+
+        if (blockLgCode) {
+            where.push("d.block_lg_code = ?");
+            params.push(blockLgCode);
+        }
+
+
+        if (categoryId) {
+            where.push("d.cat_id = ?");
+            params.push(categoryId);
+        }
+
+        if (cropId) {
+            where.push("d.crop_id = ?");
+            params.push(cropId);
+        }
+
+        if (advisoryTypeId) {
+            where.push("d.advisory_type_id = ?");
+            params.push(advisoryTypeId);
+        }
 
         if (fromDate) {
             where.push("DATE(m.advisory_date) >= ?");
@@ -841,7 +869,7 @@ export const updateAdvisory = async (req, res) => {
             message: error.message || "Failed to update advisory."
         });
 
-    }finally{
+    } finally {
         connection.release();
     }
 };
