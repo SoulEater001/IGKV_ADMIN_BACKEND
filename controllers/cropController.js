@@ -110,6 +110,53 @@ export const getCropsPaginated = async (req, res) => {
     }
 };
 
+export const getCrops = async (req, res) => {
+    try {
+        const { categoryId } = req.query;
+
+        let query = `
+            SELECT
+                c.imd_crop_id,
+                c.imd_crop_name,
+                c.imd_crop_name_h,
+                c.imd_category_id,
+                mc.img_category_name AS category_name
+            FROM imd_m_crop c
+            LEFT JOIN imd_m_category mc
+                ON c.imd_category_id = mc.imd_category_id
+        `;
+
+        const params = [];
+
+        if (categoryId) {
+            query += ` WHERE c.imd_category_id = ?`;
+            params.push(Number(categoryId));
+        }
+
+        query += `
+            ORDER BY
+                mc.img_category_name ASC,
+                c.imd_crop_name ASC
+        `;
+
+        const [rows] = await pool.query(query, params);
+
+        return res.json({
+            success: true,
+            count: rows.length,
+            data: rows
+        });
+
+    } catch (error) {
+        console.error("Error fetching crop master:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch crop master."
+        });
+    }
+};
+
 export const createCrop = async (req, res) => {
     const connection = await pool.getConnection();
     try {

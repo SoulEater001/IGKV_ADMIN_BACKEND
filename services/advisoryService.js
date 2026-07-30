@@ -158,11 +158,12 @@ export const executeCreateAdvisory = async (
             district_lg_code,
             block_lg_code,
             cat_id,
+            crop_id,
             advisory_type_id,
             advisory,
             language_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             advisoryMainId,
@@ -170,6 +171,7 @@ export const executeCreateAdvisory = async (
             data.district_lg_code,
             data.block_lg_code,
             data.imd_category_id,
+            data.crop_id,
             data.imd_advisory_type_id,
             data.advisory,
             data.language_id
@@ -244,6 +246,7 @@ export const executeUpdateAdvisory = async (
         district_lg_code,
         block_lg_code,
         imd_category_id,
+        crop_id,
         imd_advisory_type_id,
         advisory,
         language_id
@@ -257,6 +260,7 @@ export const executeUpdateAdvisory = async (
             district_lg_code = ?,
             block_lg_code = ?,
             cat_id = ?,
+            crop_id = ?,
             advisory_type_id = ?,
             advisory = ?,
             language_id = ?
@@ -267,6 +271,7 @@ export const executeUpdateAdvisory = async (
             district_lg_code,
             block_lg_code,
             imd_category_id,
+            crop_id,
             imd_advisory_type_id,
             advisory.trim(),
             language_id,

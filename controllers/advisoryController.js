@@ -5,6 +5,8 @@ import { logActivity } from '../utils/activityLogger.js'
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
 import { requiresApproval } from '../utils/approval.js'
 import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType, executeUpdateAdvisory, executeUpdateAdvisoryType } from "../services/advisoryService.js";
+import validateLocationHierarchy from '../utils/validateLocationHierarchy.js'
+
 
 export const getAdvisoriesPaginated = async (req, res) => {
     try {
@@ -86,6 +88,8 @@ export const getAdvisoriesPaginated = async (req, res) => {
                     CAST(d.id AS CHAR) LIKE ?
                     OR d.advisory LIKE ?
                     OR c.img_category_name LIKE ?
+                    OR cr.imd_crop_name LIKE ?
+                    OR cr.imd_crop_name_h LIKE ?
                     OR at.imd_advisory_type_name LIKE ?
                     OR DATE_FORMAT(m.advisory_date, '%d-%m-%Y') LIKE ?
                 )
@@ -94,11 +98,13 @@ export const getAdvisoriesPaginated = async (req, res) => {
             const keyword = `%${search.trim()}%`;
 
             params.push(
-                keyword,
-                keyword,
-                keyword,
-                keyword,
-                keyword
+                keyword, // id
+                keyword, // advisory
+                keyword, // category
+                keyword, // crop english
+                keyword, // crop hindi
+                keyword, // advisory type
+                keyword  // date
             );
 
         }
@@ -117,6 +123,9 @@ export const getAdvisoriesPaginated = async (req, res) => {
 
             LEFT JOIN imd_advisory_type at
                 ON d.advisory_type_id = at.imd_advisory_type_id
+            
+            LEFT JOIN imd_m_crop cr
+                ON d.crop_id = cr.imd_crop_id
 
             WHERE
                 ${whereSql}
@@ -136,6 +145,10 @@ export const getAdvisoriesPaginated = async (req, res) => {
                 c.imd_category_id,
                 c.img_category_name AS category,
 
+                cr.imd_crop_id,
+                cr.imd_crop_name,
+                cr.imd_crop_name_h,
+
                 at.imd_advisory_type_id,
                 at.imd_advisory_type_name AS advisory_type,
 
@@ -149,6 +162,9 @@ export const getAdvisoriesPaginated = async (req, res) => {
 
             LEFT JOIN imd_m_category c
                 ON d.cat_id = c.imd_category_id
+            
+            LEFT JOIN imd_m_crop cr
+                ON d.crop_id = cr.imd_crop_id
 
             LEFT JOIN imd_advisory_type at
                 ON d.advisory_type_id = at.imd_advisory_type_id
@@ -646,36 +662,83 @@ export const updateAdvisory = async (req, res) => {
             district_lg_code,
             block_lg_code,
             imd_category_id,
+            crop_id,
             imd_advisory_type_id,
             advisory,
             language_id
         } = req.body;
 
         if (
-            state_lg_code == null ||
-            district_lg_code == null ||
-            block_lg_code == null ||
+            language_id == null ||
             advisory == null ||
-            advisory.trim() === "" ||
-            language_id == null
+            advisory.trim() === ""
         ) {
             await connection.rollback();
+
             return res.status(400).json({
                 success: false,
-                message: "All fields are required."
+                message: "Please fill all required fields."
             });
+        }
+
+        if (!validateLocationHierarchy(
+            state_lg_code,
+            district_lg_code,
+            block_lg_code
+        )) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid location hierarchy."
+            });
+        }
+
+        if (!imd_category_id && crop_id) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Crop cannot be selected without category."
+            });
+        }
+
+        if (crop_id) {
+
+            const [[crop]] = await connection.query(
+                `
+        SELECT imd_crop_id
+        FROM imd_m_crop
+        WHERE
+            imd_crop_id = ?
+            AND imd_category_id = ?
+        `,
+                [crop_id, imd_category_id]
+            );
+
+            if (!crop) {
+
+                await connection.rollback();
+
+                return res.status(400).json({
+                    success: false,
+                    message: "Selected crop doesn't belong to category."
+                });
+
+            }
         }
 
         const [[existing]] = await connection.query(
             `
-            SELECT id
-            FROM imd_advisory_detail
-            WHERE id = ?
-            `,
+                SELECT id
+                FROM imd_advisory_detail
+                WHERE id = ?
+                `,
             [id]
         );
 
         if (!existing) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: "Advisory not found."
@@ -683,20 +746,19 @@ export const updateAdvisory = async (req, res) => {
         }
 
         const advisoryData = {
-
             id: Number(id),
 
             state_lg_code,
-            district_lg_code,
-            block_lg_code,
+            district_lg_code: district_lg_code ?? null,
+            block_lg_code: block_lg_code ?? null,
 
-            imd_category_id,
+            imd_category_id: imd_category_id ?? null,
+            crop_id: crop_id ?? null,
+
             imd_advisory_type_id,
+            language_id,
 
-            advisory: advisory.trim(),
-
-            language_id
-
+            advisory: advisory.trim()
         };
 
         if (requiresApproval(req.user)) {
@@ -773,12 +835,14 @@ export const updateAdvisory = async (req, res) => {
     } catch (error) {
 
         console.error(error);
-
+        await connection.rollback();
         res.status(500).json({
             success: false,
             message: error.message || "Failed to update advisory."
         });
 
+    }finally{
+        connection.release();
     }
 };
 
@@ -792,6 +856,7 @@ export const createAdvisory = async (req, res) => {
             district_lg_code,
             block_lg_code,
             imd_category_id,
+            crop_id,
             imd_advisory_type_id,
             language_id,
             advisory,
@@ -799,9 +864,6 @@ export const createAdvisory = async (req, res) => {
         } = req.body;
 
         if (
-            state_lg_code == null ||
-            district_lg_code == null ||
-            block_lg_code == null ||
             language_id == null ||
             advisory == null ||
             advisory_date == null ||
@@ -814,11 +876,56 @@ export const createAdvisory = async (req, res) => {
             });
         }
 
-        const advisoryData = {
+        if (!validateLocationHierarchy(
             state_lg_code,
             district_lg_code,
-            block_lg_code,
-            imd_category_id,
+            block_lg_code
+        )) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: "Invalid location hierarchy."
+            });
+        }
+
+        if (!imd_category_id && crop_id) {
+            await connection.rollback();
+            return res.status(400).json({
+                success: false,
+                message: "Crop cannot be selected without category."
+            });
+        }
+
+        if (crop_id) {
+
+            const [[crop]] = await connection.query(
+                `
+        SELECT imd_crop_id
+        FROM imd_m_crop
+        WHERE
+            imd_crop_id=?
+            AND imd_category_id=?
+        `,
+                [crop_id, imd_category_id]
+            );
+
+            if (!crop) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: "Selected crop doesn't belong to category."
+                });
+
+            }
+
+        }
+
+        const advisoryData = {
+            state_lg_code,
+            district_lg_code: district_lg_code ?? null,
+            block_lg_code: block_lg_code ?? null,
+            imd_category_id: imd_category_id ?? null,
+            crop_id: crop_id ?? null,
             imd_advisory_type_id,
             language_id,
             advisory: advisory.trim(),
@@ -839,6 +946,9 @@ export const createAdvisory = async (req, res) => {
                     state_lg_code,
                     district_lg_code,
                     block_lg_code,
+                    imd_category_id,
+                    crop_id,
+                    imd_advisory_type_id,
                     language_id
                 }
             );
