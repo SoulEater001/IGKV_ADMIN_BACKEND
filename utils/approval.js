@@ -1,12 +1,26 @@
 import { ROLES } from "../constant/index.js";
 
-export const SYSTEM_ROLES = new Set([
-    ROLES.SUPER_ADMIN
-]);
+const SYSTEM = [
+    ROLES.SUPER_ADMIN,
+];
+
+const ADMIN_PANEL = [
+    ROLES.ADMIN,
+    ...SYSTEM,
+];
+
+export const ROLE_GROUPS = Object.freeze({  
+    SYSTEM,                                 // System-level roles
+    ADMIN_PANEL,                            // Access admin application
+    APPROVAL: [...SYSTEM],            // Can approve/reject requests
+    ALL: Object.values(ROLES),
+});
+
+export const SYSTEM_ROLES = new Set(ROLE_GROUPS.SYSTEM);
 
 const APPROVAL_REQUIRED_ROLES = new Set([
     ROLES.ADMIN,
-    ROLES.TEST
+    ROLES.TEST,
 ]);
 
 export const ROLE_MANAGEMENT = {
