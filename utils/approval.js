@@ -27,7 +27,6 @@ export const ROLE_MANAGEMENT = {
     [ROLES.SUPER_ADMIN]: new Set(Object.values(ROLES)),
 
     [ROLES.ADMIN]: new Set([    //Current user role
-        ROLES.ADMIN,            //Can manage this roles
         ROLES.TEST              //Can manage this roles
     ])
 };
@@ -42,3 +41,8 @@ export const canManageRole = (user, roleName) =>
     user.roles?.some(role =>
         ROLE_MANAGEMENT[role]?.has(roleName)
     ) ?? false;
+
+    export const canManageUser = (user, targetRoles) =>
+    targetRoles.every(role =>
+        canManageRole(user, role)
+    );

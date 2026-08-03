@@ -191,7 +191,7 @@ export const me = async (req, res) => {
 export const refresh = async (req, res) => {
     const connection = await pool.getConnection();
     try {
-        console.log("Refresh endpoint called")
+        // console.log("Refresh endpoint called")
         await connection.beginTransaction();
         const refreshToken = req.cookies.refreshToken;
 

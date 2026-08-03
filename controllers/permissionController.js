@@ -1,5 +1,5 @@
 import { pool } from "../config/db.js";
-import { PERMISSION_ACTIONS, PERMISSION_RESOURCES } from "../constant/index.js";
+import { PERMISSION_ACTION_LIST, PERMISSION_RESOURCE_LIST } from "../constant/index.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
@@ -143,7 +143,7 @@ export const createPermission = async (req, res) => {
         const normalizedResource = resource.trim();
         const normalizedAction = action.trim();
 
-        if (!PERMISSION_RESOURCES.includes(normalizedResource)) {
+        if (!PERMISSION_RESOURCE_LIST.includes(normalizedResource)) {
             await connection.rollback();
 
             return res.status(400).json({
@@ -152,7 +152,7 @@ export const createPermission = async (req, res) => {
             });
         }
 
-        if (!PERMISSION_ACTIONS.includes(normalizedAction)) {
+        if (!PERMISSION_ACTION_LIST.includes(normalizedAction)) {
             await connection.rollback();
 
             return res.status(400).json({
@@ -489,8 +489,8 @@ export const getPermissionOptions = async (req, res) => {
     return res.status(200).json({
         success: true,
         data: {
-            resources: PERMISSION_RESOURCES,
-            actions: PERMISSION_ACTIONS
+            resources: PERMISSION_RESOURCE_LIST,
+            actions: PERMISSION_ACTION_LIST
         }
     });
 

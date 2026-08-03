@@ -1,0 +1,204 @@
+import { digitalAgriPool } from "../config/digitalAgriDb.js";
+import {
+  CropDistributionDTO,
+  DistrictDistributionDTO,
+  DistrictCropHeatmapDTO,
+  DistrictCropDTO,
+} from "../models/chart.dto.js";
+
+async function getCropDistribution() {
+  const query = `
+    SELECT
+      cd.crop_code AS cropCode,
+      mc.crop_name AS cropName,
+      COUNT(DISTINCT f.uf_id) AS farmerCount
+    FROM mas_farmer f
+    JOIN land_details ld
+      ON f.uf_id = ld.uf_id
+    JOIN crop_details cd
+      ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
+    JOIN mas_crop mc
+      ON mc.crop_code = cd.crop_code
+    GROUP BY
+      cd.crop_code,
+      mc.crop_name
+    ORDER BY farmerCount DESC;
+  `;
+
+  try {
+    const [rows] = await digitalAgriPool.query(query);
+
+    return rows.map(
+      (row) =>
+        new CropDistributionDTO(
+          Number(row.cropCode),
+          row.cropName,
+          Number(row.farmerCount) || 0
+        )
+    );
+  } catch (err) {
+    console.error("[ChartService:getCropDistribution] Error:", err.message);
+    throw new Error("Database query failed");
+  }
+}
+
+async function getDistrictDistribution() {
+  const query = `
+    SELECT
+      d.Rev_district_id AS districtId,
+      d.District_Name AS districtName,
+      COUNT(DISTINCT f.uf_id) AS farmerCount
+    FROM mas_farmer f
+    JOIN mas_villages v
+      ON f.village_code = v.vsr_census
+    JOIN mas_districts d
+      ON d.Rev_district_id = v.distno
+    GROUP BY
+      d.Rev_district_id,
+      d.District_Name
+
+    UNION ALL
+
+    SELECT
+      0 AS districtId,
+      'Unknown' AS districtName,
+      COUNT(DISTINCT f.uf_id) AS farmerCount
+    FROM mas_farmer f
+    LEFT JOIN mas_villages v
+      ON f.village_code = v.vsr_census
+    LEFT JOIN mas_districts d
+      ON d.Rev_district_id = v.distno
+    WHERE d.Rev_district_id IS NULL
+    HAVING COUNT(DISTINCT f.uf_id) > 0
+
+    ORDER BY farmerCount DESC;
+  `;
+
+  try {
+    const [rows] = await digitalAgriPool.query(query);
+
+    return rows.map(
+      (row) =>
+        new DistrictDistributionDTO(
+          Number(row.districtId),
+          row.districtName,
+          Number(row.farmerCount) || 0
+        )
+    );
+  } catch (err) {
+    console.error("[ChartService:getDistrictDistribution] Error:", err.message);
+    throw new Error("Database query failed");
+  }
+}
+
+async function getCropCountHeatmap() {
+  const query = `
+    SELECT
+      d.Rev_district_id AS districtId,
+      d.District_Name_Eng AS districtName,
+      c.cropCode,
+      c.cropName,
+      COALESCE(c.cropCount, 0) AS cropCount
+    FROM mas_districts d
+    LEFT JOIN (
+      SELECT
+        v.distno AS districtId,
+        mc.crop_code AS cropCode,
+        mc.crop_name AS cropName,
+        COUNT(cd.crop_code) AS cropCount
+      FROM crop_details cd
+      JOIN land_details ld
+        ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
+      JOIN mas_farmer f
+        ON f.uf_id = ld.uf_id
+      JOIN mas_villages v
+        ON f.village_code = v.vsr_census
+      JOIN mas_crop mc
+        ON mc.crop_code = cd.crop_code
+      GROUP BY
+        v.distno,
+        mc.crop_code,
+        mc.crop_name
+    ) c
+      ON c.districtId = d.Rev_district_id
+
+    UNION ALL
+
+    SELECT
+      0 AS districtId,
+      'Unknown' AS districtName,
+      mc.crop_code AS cropCode,
+      mc.crop_name AS cropName,
+      COUNT(cd.crop_code) AS cropCount
+    FROM crop_details cd
+    JOIN land_details ld
+      ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
+    JOIN mas_farmer f
+      ON f.uf_id = ld.uf_id
+    LEFT JOIN mas_villages v
+      ON f.village_code = v.vsr_census
+    LEFT JOIN mas_districts d
+      ON d.Rev_district_id = v.distno
+    JOIN mas_crop mc
+      ON mc.crop_code = cd.crop_code
+    WHERE d.Rev_district_id IS NULL
+    GROUP BY
+      mc.crop_code,
+      mc.crop_name
+    HAVING COUNT(cd.crop_code) > 0
+
+    ORDER BY
+      CASE
+        WHEN districtId = 0 THEN 1
+        ELSE 0
+      END,
+      districtName,
+      cropName;
+  `;
+
+  try {
+    const [rows] = await digitalAgriPool.query(query);
+
+    const districtMap = new Map();
+
+    for (const row of rows) {
+      const districtId = Number(row.districtId);
+
+      if (!districtMap.has(districtId)) {
+        districtMap.set(
+          districtId,
+          new DistrictCropHeatmapDTO(
+            districtId,
+            row.districtName,
+            0,
+            []
+          )
+        );
+      }
+
+      const district = districtMap.get(districtId);
+      const cropCount = Number(row.cropCount) || 0;
+
+      district.crops.push(
+        new DistrictCropDTO(
+          Number(row.cropCode),
+          row.cropName,
+          cropCount
+        )
+      );
+
+      district.totalCropCount += cropCount;
+    }
+
+    return [...districtMap.values()];
+  } catch (err) {
+    console.error("[ChartService:getCropCountHeatmap] Error:", err.message);
+    throw new Error("Database query failed");
+  }
+}
+
+export {
+  getCropDistribution,
+  getDistrictDistribution,
+  getCropCountHeatmap,
+};

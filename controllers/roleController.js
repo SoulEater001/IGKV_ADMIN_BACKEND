@@ -200,6 +200,7 @@ export const updateRole = async (req, res) => {
             description,
             permissionIds = []
         } = req.body;
+
         const normalizedName = name?.trim().toUpperCase();
 
         if (!normalizedName?.trim()) {
@@ -208,6 +209,17 @@ export const updateRole = async (req, res) => {
                 success: false,
                 message: "Role name is required."
             });
+        }
+
+        if (!canManageRole(req.user, normalizedName)) {
+
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: `You cannot assign the role name ${normalizedName}.`
+            });
+
         }
 
         const [[role]] = await connection.query(
@@ -225,6 +237,17 @@ export const updateRole = async (req, res) => {
                 success: false,
                 message: "Role not found."
             });
+        }
+
+        if (!canManageRole(req.user, role.name)) {
+
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: `You cannot modify the ${role.name} role.`
+            });
+
         }
 
         const [[existing]] = await connection.query(
@@ -387,16 +410,17 @@ export const deleteRole = async (req, res) => {
             name: role.name
         };
 
-        if (isSystemRole(role.name)) {
+        if (!canManageRole(req.user, role.name)) {
 
             await connection.rollback();
 
             return res.status(403).json({
                 success: false,
-                message: "The Super Admin role cannot be deleted."
+                message: `You cannot delete the ${role.name} role.`
             });
 
         }
+
         if (requiresApproval(req.user)) {
 
             const pending = await hasPendingApproval(

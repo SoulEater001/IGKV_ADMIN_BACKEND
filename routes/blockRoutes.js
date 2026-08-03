@@ -1,19 +1,63 @@
 import express from "express";
 import { getBlockById, getBlocksPaginated, updateBlock, createBlock, deleteBlock, getBlocks } from "../controllers/blockController.js";
-import { authenticate } from '../middleware/authMiddleware.js'
+import { authenticate, authorize, authorizePermissions } from '../middleware/authMiddleware.js'
+import { PERMISSION_ACTIONS, PERMISSION_RESOURCES } from "../constant/index.js";
+import { ROLE_GROUPS } from "../utils/approval.js";
 
 const router = express.Router();
 
-router.get("/", getBlocks);
+router.use(authenticate);
+router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL));
 
-router.get("/paginated", getBlocksPaginated);
+router.get("/", 
+    authorizePermissions(
+        PERMISSION_RESOURCES.BLOCK, 
+        PERMISSION_ACTIONS.READ
+    ),
+    getBlocks
 
-router.get("/:id", getBlockById);
+); 
+router.get("/paginated",
+    authorizePermissions(
+        PERMISSION_RESOURCES.BLOCK, 
+        PERMISSION_ACTIONS.READ
+    ),
+    getBlocksPaginated
+);
 
-router.post("/create", authenticate, createBlock);
+router.get("/:id",
+    authorizePermissions(
+        PERMISSION_RESOURCES.BLOCK,
+        PERMISSION_ACTIONS.READ
+    ),
+    getBlockById
+);
 
-router.put("/:id", authenticate, updateBlock);
+router.post(
+    "/create",
+    authorizePermissions(
+        PERMISSION_RESOURCES.BLOCK,
+        PERMISSION_ACTIONS.CREATE
+    ),
+    createBlock
+);
 
-router.delete("/:id", authenticate, deleteBlock);
+router.put(
+    "/:id",
+    authorizePermissions(
+        PERMISSION_RESOURCES.BLOCK,
+        PERMISSION_ACTIONS.UPDATE
+    ),
+    updateBlock
+);
+
+router.delete(
+    "/:id",
+    authorizePermissions(
+        PERMISSION_RESOURCES.BLOCK,
+        PERMISSION_ACTIONS.DELETE
+    ),
+    deleteBlock
+);
 
 export default router;

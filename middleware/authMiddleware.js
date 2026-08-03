@@ -82,25 +82,15 @@ export const authorize = (...roles) => {
     };
 };
 
-export const authorizePermissions = (resource, action) => {
-    return async (req, res, next) => {
-        try {
+export const authorizePermissions = (resource, action) => (req, res, next) => {
+    const permission = `${resource}:${action}`;
 
-            const permission = `${resource}:${action}`;
+    if (!req.user.permissions.includes(permission)) {
+        return res.status(403).json({
+            success: false,
+            message: "Forbidden"
+        });
+    }
 
-            const hasPermission =
-                req.user.permissions.includes(permission);
-
-            if (!hasPermission) {
-                return res.status(403).json({
-                    success: false,
-                    message: "Forbidden"
-                });
-            }
-
-            next();
-        } catch (error) {
-            next(error);
-        }
-    };
+    next();
 };

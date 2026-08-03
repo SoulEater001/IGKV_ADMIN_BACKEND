@@ -6,7 +6,7 @@ import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { executeCreateUser, executeDeleteUser, executeUpdateUser } from "../services/adminUserService.js";
 import { ROLES } from "../constant/index.js";
-import { requiresApproval, canManageRole } from "../utils/approval.js";
+import { requiresApproval, canManageUser } from "../utils/approval.js";
 import { invalidateUserTokens } from '../utils/token.js'
 
 export const getUsers = async (req, res) => {
@@ -140,18 +140,14 @@ export const createUser = async (req, res) => {
             });
         }
 
-        for (const role of roles) {
+        if (!canManageUser(req.user, roles.map(r => r.name))) {
 
-            if (!canManageRole(req.user, role.name)) {
+            await connection.rollback();
 
-                await connection.rollback();
-
-                return res.status(403).json({
-                    success: false,
-                    message: `You are not allowed to assign ${role.name}.`
-                });
-
-            }
+            return res.status(403).json({
+                success: false,
+                message: "You are not allowed to assign one or more selected roles."
+            });
 
         }
 
@@ -312,12 +308,27 @@ WHERE id = ?
 
         const [existingRoles] = await connection.query(
             `
-    SELECT role_id
-    FROM user_roles
-    WHERE user_id = ?
+    SELECT
+        ur.role_id,
+        r.name
+    FROM user_roles ur
+    JOIN roles r
+        ON ur.role_id = r.id
+    WHERE ur.user_id = ?
     `,
             [id]
         );
+
+        if (!canManageUser(req.user, existingRoles.map(r => r.name))) {
+
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: "You are not allowed to modify this user."
+            });
+
+        }
 
         const currentRoleIds = existingRoles
             .map(r => Number(r.role_id))
@@ -363,21 +374,6 @@ WHERE id = ?
                 success: false,
                 message: "Role not found."
             });
-        }
-
-        for (const role of roles) {
-
-            if (!canManageRole(req.user, role.name)) {
-
-                await connection.rollback();
-
-                return res.status(403).json({
-                    success: false,
-                    message: `You are not allowed to assign ${role.name}.`
-                });
-
-            }
-
         }
 
         const userData = {
@@ -490,7 +486,8 @@ export const deleteUser = async (req, res) => {
                 u.id,
                 u.name,
                 u.email,
-                r.name AS role
+                r.id AS role_id,
+                r.name AS role_name
             FROM admin_users u
             LEFT JOIN user_roles ur
                 ON u.id = ur.user_id
@@ -522,21 +519,6 @@ export const deleteUser = async (req, res) => {
                 }))
         };
 
-        for (const role of user.roles) {
-
-            if (!canManageRole(req.user, role.name)) {
-
-                await connection.rollback();
-
-                return res.status(403).json({
-                    success: false,
-                    message: `You cannot delete a ${role.name}.`
-                });
-
-            }
-
-        }
-
         if (req.user.id == Number(id)) {
             await connection.rollback();
             return res.status(400).json({
@@ -544,6 +526,18 @@ export const deleteUser = async (req, res) => {
                 message: "You cannot delete your own account."
             });
         }
+
+        if (!canManageUser(req.user, user.roles.map(r => r.name))) {
+
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: "You are not allowed to delete this user."
+            });
+
+        }
+
         const payload = {
             id: user.id,
             name: user.name,

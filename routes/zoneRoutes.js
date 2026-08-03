@@ -1,28 +1,59 @@
 import express from "express";
 import * as zoneController from "../controllers/zoneController.js";
-// import upload from "../middlewares/upload.js";
-import { authenticate } from "../middleware/authMiddleware.js";
+import {authenticate,authorize,authorizePermissions} from "../middleware/authMiddleware.js";
+import {PERMISSION_ACTIONS,PERMISSION_RESOURCES} from "../constant/index.js";
+import { ROLE_GROUPS } from "../utils/approval.js";
 
 const router = express.Router();
 
-router.get("/", zoneController.getZones);
+router.use(authenticate);
+router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL));
 
-router.get("/:id", zoneController.getZoneById);
+router.get(
+    "/",
+    authorizePermissions(
+        PERMISSION_RESOURCES.ZONE,
+        PERMISSION_ACTIONS.READ
+    ),
+    zoneController.getZones
+);
+
+router.get(
+    "/:id",
+    authorizePermissions(
+        PERMISSION_RESOURCES.ZONE,
+        PERMISSION_ACTIONS.READ
+    ),
+    zoneController.getZoneById
+);
 
 router.post(
-    "/create", 
-    authenticate,
+    "/create",
+    authorizePermissions(
+        PERMISSION_RESOURCES.ZONE,
+        PERMISSION_ACTIONS.CREATE
+    ),
     // upload.single("image"),
     zoneController.createZone
 );
 
 router.put(
-    "/:id", 
-    authenticate,
+    "/:id",
+    authorizePermissions(
+        PERMISSION_RESOURCES.ZONE,
+        PERMISSION_ACTIONS.UPDATE
+    ),
     // upload.single("image"),
     zoneController.updateZone
 );
 
-router.delete("/:id", authenticate, zoneController.deleteZone);
+router.delete(
+    "/:id",
+    authorizePermissions(
+        PERMISSION_RESOURCES.ZONE,
+        PERMISSION_ACTIONS.DELETE
+    ),
+    zoneController.deleteZone
+);
 
 export default router;

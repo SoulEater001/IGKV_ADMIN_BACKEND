@@ -1,23 +1,32 @@
-export const PERMISSION_ACTIONS = [
-    "create",
-    "read",
-    "update",
-    "delete"
-];
+export const PERMISSION_ACTIONS = Object.freeze({
+    CREATE: "create",
+    READ: "read",
+    UPDATE: "update",
+    DELETE: "delete",
+});
 
-export const PERMISSION_RESOURCES = [
-    "users",
-    "roles",
-    "permissions",
-    "categories",
-    "advisory-types",
-    "crops",
-    "advisories",
-    "state",
-    "zone",
-    "district",
-    "block",
-];
+export const PERMISSION_ACTION_LIST = Object.freeze(
+    Object.values(PERMISSION_ACTIONS)
+);
+
+export const PERMISSION_RESOURCES = Object.freeze({
+    USERS: "users",
+    ROLES: "roles",
+    PERMISSIONS: "permissions",
+    APPROVALS: "approvals",
+    CATEGORIES: "categories",
+    ADVISORY_TYPES: "advisory-types",
+    CROPS: "crops",
+    ADVISORIES: "advisories",
+    STATE: "state",
+    ZONE: "zone",
+    DISTRICT: "district",
+    BLOCK: "block",
+});
+
+export const PERMISSION_RESOURCE_LIST = Object.freeze(
+    Object.values(PERMISSION_RESOURCES)
+);
 
 export const ROLES = {
     ADMIN : "ADMIN",

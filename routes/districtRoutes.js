@@ -1,19 +1,55 @@
 import express from "express";
-import {getDistrictById, createDistrict, updateDistrict, deleteDistrict, getDistricts, getDistrictsPaginated } from "../controllers/districtController.js";
-import { authenticate } from "../middleware/authMiddleware.js";
-
+import { getDistrictById, createDistrict, updateDistrict, deleteDistrict, getDistricts, getDistrictsPaginated } from "../controllers/districtController.js";
+import { authenticate, authorize, authorizePermissions } from "../middleware/authMiddleware.js";
+import { PERMISSION_ACTIONS, PERMISSION_RESOURCES } from "../constant/index.js";
+import { ROLE_GROUPS } from "../utils/approval.js";
 
 const router = express.Router();
 
-router.get("/paginated", getDistrictsPaginated);
-router.get("/", getDistricts);
+router.use(authenticate);
+router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL));
 
-router.get("/:id", getDistrictById);
+router.get("/",
+    authorizePermissions(PERMISSION_RESOURCES.DISTRICT, PERMISSION_ACTIONS.READ),
+    getDistricts
+);
+router.get("/paginated",
+    authorizePermissions(PERMISSION_RESOURCES.DISTRICT, PERMISSION_ACTIONS.READ),
+    getDistrictsPaginated
+);
 
-router.post("/create", authenticate, createDistrict);
+router.get("/:id",
+    authorizePermissions(
+        PERMISSION_RESOURCES.DISTRICT,
+        PERMISSION_ACTIONS.READ
+    ),
+    getDistrictById);
 
-router.put("/:id", authenticate, updateDistrict);
+router.post(
+    "/create",
+    authorizePermissions(
+        PERMISSION_RESOURCES.DISTRICT,
+        PERMISSION_ACTIONS.CREATE
+    ),
+    createDistrict
+);
 
-router.delete("/:id", authenticate, deleteDistrict);
+router.put(
+    "/:id",
+    authorizePermissions(
+        PERMISSION_RESOURCES.DISTRICT,
+        PERMISSION_ACTIONS.UPDATE
+    ),
+    updateDistrict
+);
+
+router.delete(
+    "/:id",
+    authorizePermissions(
+        PERMISSION_RESOURCES.DISTRICT,
+        PERMISSION_ACTIONS.DELETE
+    ),
+    deleteDistrict
+);
 
 export default router;
