@@ -119,12 +119,20 @@ class FarmerCropDTO {
  * Farmer Table DTO
  */
 class FarmerTableDTO {
-  constructor(id, name, totalFarmers, totalArea, totalProduction, cropCount) {
+  constructor(id, name, totalFarmers, totalArea, cropArea, totalProduction, cropProduction, cropCount) {
     this.id = id;
     this.name = name;
     this.totalFarmers = totalFarmers;
+
+    // Overall values
     this.totalArea = totalArea;
     this.totalProduction = totalProduction;
+
+    // Selected crop values
+    this.cropArea = cropArea;
+    this.cropProduction = cropProduction;
+
+    // Overall crop varieties
     this.cropCount = cropCount;
   }
 }

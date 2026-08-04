@@ -6,6 +6,7 @@ const SYSTEM = [
 
 const ADMIN_PANEL = [
     ROLES.ADMIN,
+    ROLES.TEST,
     ...SYSTEM,
 ];
 

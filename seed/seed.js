@@ -25,7 +25,7 @@ if (
 async function seedRoles() {
     console.log("Seeding roles...");
 
-    for (const role of ROLES) {
+    for (const role of Object.values(ROLES)) {
         await pool.query(
             `
             INSERT IGNORE INTO roles (name, description)
