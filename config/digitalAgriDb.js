@@ -15,7 +15,7 @@ export const digitalAgriPool = mysql.createPool({
 async function test() {
     try {
         const [rows] = await digitalAgriPool.query("SELECT DATABASE() AS db");
-        console.log(rows);
+        // console.log(rows);
         await digitalAgriPool.query("SELECT 1");
         console.log("Connected to Digital Agri DB");
     } catch (err) {

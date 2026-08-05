@@ -4,33 +4,33 @@ import * as farmerService from '../services/farmer.service.js'
 async function getDistrictSummary(req, res) {
   try {
     const { cropCode, farmerType, districtId } = req.query;
-    console.log("District summary controller hit");
+
     const data = await farmerService.getDistrictSummary(
       cropCode,
       farmerType,
       districtId
     );
 
-    var statusCode = 200;
-    if (Array.isArray(data.items) && data.items.length === 0) {
-      statusCode = 404;
-    }
+    return res.status(200).json(
+      new ApiResponse(
+        data,
+        "District summary fetched successfully",
+        200,
+        true
+      )
+    );
 
-    const response = new ApiResponse(
-      data,
-      "District summary fetched successfully",
-      statusCode,
-      statusCode === 200
-    );
-    res.status(statusCode).json(response);
   } catch (err) {
-    const errorResponse = new ApiResponse(
-      null,
-      "Failed to fetch district summary",
-      500,
-      false
+    console.error("[FarmerController:getDistrictSummary]", err);
+
+    return res.status(500).json(
+      new ApiResponse(
+        null,
+        "Failed to fetch district summary",
+        500,
+        false
+      )
     );
-    res.status(500).json(errorResponse);
   }
 }
 
@@ -39,16 +39,14 @@ async function getTehsilSummary(req, res) {
     const { cropCode, farmerType, districtId } = req.query;
 
     if (!districtId) {
-      return res
-        .status(400)
-        .json(
-          new ApiResponse(
-            null,
-            "districtId is required for tehsil summary",
-            400,
-            false
-          )
-        );
+      return res.status(400).json(
+        new ApiResponse(
+          null,
+          "districtId is required for tehsil summary",
+          400,
+          false
+        )
+      );
     }
 
     const data = await farmerService.getTehsilSummary(
@@ -57,26 +55,25 @@ async function getTehsilSummary(req, res) {
       districtId
     );
 
-    var statusCode = 200;
-    if (Array.isArray(data.items) && data.items.length === 0) {
-      statusCode = 404;
-    }
-
-    const response = new ApiResponse(
-      data,
-      "Tehsil summary fetched successfully",
-      statusCode,
-      statusCode === 200
+    return res.status(200).json(
+      new ApiResponse(
+        data,
+        "Tehsil summary fetched successfully",
+        200,
+        true
+      )
     );
-    res.status(statusCode).json(response);
   } catch (err) {
-    const errorResponse = new ApiResponse(
-      null,
-      "Failed to fetch tehsil summary",
-      500,
-      false
+    console.error(err);
+
+    return res.status(500).json(
+      new ApiResponse(
+        null,
+        "Failed to fetch tehsil summary",
+        500,
+        false
+      )
     );
-    res.status(500).json(errorResponse);
   }
 }
 
@@ -85,16 +82,14 @@ async function getVillageSummary(req, res) {
     const { cropCode, farmerType, districtId, tehsilNo } = req.query;
 
     if (!districtId || !tehsilNo) {
-      return res
-        .status(400)
-        .json(
-          new ApiResponse(
-            null,
-            "districtId and tehsilNo are required",
-            400,
-            false
-          )
-        );
+      return res.status(400).json(
+        new ApiResponse(
+          null,
+          "districtId and tehsilNo are required",
+          400,
+          false
+        )
+      );
     }
 
     const data = await farmerService.getVillageSummary(
@@ -104,28 +99,26 @@ async function getVillageSummary(req, res) {
       tehsilNo
     );
 
-    let statusCode = 200;
-    if (Array.isArray(data.items) && data.items.length === 0) {
-      statusCode = 404;
-    }
-
     const response = new ApiResponse(
       data,
-      statusCode === 200
-        ? "Village summary fetched successfully"
-        : "No villages found",
-      statusCode,
-      statusCode === 200
+      "Village summary fetched successfully",
+      200,
+      true
     );
-    res.status(statusCode).json(response);
+
+    return res.status(200).json(response);
+
   } catch (err) {
-    const errorResponse = new ApiResponse(
-      null,
-      "Failed to fetch village summary",
-      500,
-      false
+    console.error("[FarmerController:getVillageSummary]", err);
+
+    return res.status(500).json(
+      new ApiResponse(
+        null,
+        "Failed to fetch village summary",
+        500,
+        false
+      )
     );
-    res.status(500).json(errorResponse);
   }
 }
 

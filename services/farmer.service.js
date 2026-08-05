@@ -1,4 +1,4 @@
-import {digitalAgriPool} from "../config/digitalAgriDb.js";
+import { digitalAgriPool } from "../config/digitalAgriDb.js";
 import {
   FarmerTableDTO,
   FarmerSummaryResponse,
@@ -8,10 +8,11 @@ import {
   FarmerLandDTO,
   FarmerCropDTO,
 } from '../models/farmer.dto.js';
+import { FarmerQueries } from "../queries/farmer.query.js";
 
 
 async function getDistrictSummary(cropCode, farmerType, districtId) {
-  console.log("District summary service hit");
+  // console.log("District summary service hit");
 
   let farmerConditions = "";
   const params = [];
@@ -34,97 +35,33 @@ async function getDistrictSummary(cropCode, farmerType, districtId) {
   const districtFilter = districtId ? " AND v.distno = ? " : "";
   const useMatchedJoin = cropCode || farmerType || districtId;
 
-  const query = `
-    WITH eligible_farmers AS (
-      SELECT
-        f.uf_id,
-        v.distno,
-        fa.totalLand
-      FROM mas_farmer f
-      JOIN (
-        SELECT
-          uf_id,
-          SUM(ld.land_area) AS totalLand
-        FROM land_details ld
-        GROUP BY uf_id
-      ) fa
-        ON f.uf_id = fa.uf_id
-      JOIN mas_villages v
-        ON f.village_code = v.vsr_census
-      JOIN mas_tehsil t
-        ON v.tehsilno = t.Rev_teh_id
-       AND v.distno = t.Rev_dist_id
-      ${
-        cropCode
-          ? `JOIN land_details ld
-               ON f.uf_id = ld.uf_id
-             JOIN crop_details cd
-               ON cd.id_masterkey_khasra = ld.id_masterkey_khasra`
-          : ""
-      }
-      WHERE 1=1
-        ${cropFilter}
-        ${farmerConditions}
-        ${districtFilter}
-      GROUP BY
-        f.uf_id,
-        v.distno,
-        fa.totalLand
-    )
+  const query = FarmerQueries.districtSummary({
+    cropCode,
+    districtId,
+    farmerConditions,
+    cropFilter,
+    districtFilter,
+    useMatchedJoin,
+  });
 
-    SELECT
-      d.Rev_district_id AS id,
-      d.District_Name AS name,
-      COALESCE(fcnt.totalFarmers,0) AS totalFarmers,
-      COALESCE(aggr.totalArea,0) AS totalArea,
-      COALESCE(aggr.totalProduction,0) AS totalProduction,
-      COALESCE(aggr.cropCount,0) AS cropCount
-    FROM mas_districts d
+  if (districtId) {
+    params.push(Number(districtId));
+  }
 
-    ${
-      useMatchedJoin
-        ? `JOIN (
-             SELECT DISTINCT ef.distno
-             FROM eligible_farmers ef
-           ) matched
-             ON matched.distno = d.Rev_district_id`
-        : ""
-    }
+  if (cropCode) {
+    params.push(Number(cropCode));
+  }
 
-    LEFT JOIN (
-      SELECT
-        ef.distno AS district_id,
-        COUNT(DISTINCT ef.uf_id) AS totalFarmers
-      FROM eligible_farmers ef
-      GROUP BY ef.distno
-    ) fcnt
-      ON fcnt.district_id = d.Rev_district_id
+  if (cropCode) {
+    params.push(Number(cropCode));
+  }
 
-    LEFT JOIN (
-      SELECT
-        ef.distno AS district_id,
-        CAST(SUM(ld.land_area) AS DECIMAL(18,3)) AS totalArea,
-        CAST(SUM(cd.crop_area * 19) AS DECIMAL(18,3)) AS totalProduction,
-        COUNT(DISTINCT cd.crop_code) AS cropCount
-      FROM eligible_farmers ef
-      JOIN land_details ld
-        ON ef.uf_id = ld.uf_id
-      JOIN crop_details cd
-        ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
-      GROUP BY ef.distno
-    ) aggr
-      ON aggr.district_id = d.Rev_district_id
-
-    ${districtId ? "WHERE d.Rev_district_id = ?" : ""}
-
-    ORDER BY d.Rev_district_id;
-  `;
-
-  if (cropCode) params.push(Number(cropCode));
-  if (districtId) params.push(Number(districtId));
-  if (districtId) params.push(Number(districtId));
+  if (districtId) {
+    params.push(Number(districtId));
+  }
 
   try {
+    // console.log("try block")
     const [rows] = await digitalAgriPool.query(query, params);
 
     const items = rows.map(
@@ -132,9 +69,16 @@ async function getDistrictSummary(cropCode, farmerType, districtId) {
         new FarmerTableDTO(
           Number(row.id),
           row.name,
+
           Number(row.totalFarmers) || 0,
+
+          // Overall values
           Number(row.totalArea) || 0,
+          Number(row.cropArea) || 0,
+
           Number(row.totalProduction) || 0,
+          Number(row.cropProduction) || 0,
+
           Number(row.cropCount) || 0
         )
     );
@@ -185,97 +129,20 @@ async function getTehsilSummary(cropCode, farmerType, districtId) {
   }
 
   const cropFilter = cropCode ? " AND cd.crop_code = ? " : "";
-  const useMatchedJoin = cropCode || farmerType;
+  const useMatchedJoin = cropCode || farmerType || districtId;
 
-  const query = `
-    WITH eligible_farmers AS (
-      SELECT
-        f.uf_id,
-        v.distno,
-        t.Rev_teh_id AS tehsilId,
-        fa.totalLand
-      FROM mas_farmer f
-      JOIN (
-        SELECT
-          uf_id,
-          SUM(ld.land_area) AS totalLand
-        FROM land_details ld
-        GROUP BY uf_id
-      ) fa
-        ON f.uf_id = fa.uf_id
-      JOIN mas_villages v
-        ON f.village_code = v.vsr_census
-      JOIN mas_tehsil t
-        ON v.tehsilno = t.Rev_teh_id
-       AND v.distno = t.Rev_dist_id
-      ${
-        cropCode
-          ? `JOIN land_details ld
-               ON f.uf_id = ld.uf_id
-             JOIN crop_details cd
-               ON cd.id_masterkey_khasra = ld.id_masterkey_khasra`
-          : ""
-      }
-      WHERE t.Rev_dist_id = ?
-        ${cropFilter}
-        ${farmerConditions}
-      GROUP BY
-        f.uf_id,
-        v.distno,
-        t.Rev_teh_id,
-        fa.totalLand
-    )
-
-    SELECT
-      t.Rev_teh_id AS id,
-      t.Tehsil_Name AS name,
-      COALESCE(fcnt.totalFarmers, 0) AS totalFarmers,
-      COALESCE(aggr.totalArea, 0) AS totalArea,
-      COALESCE(aggr.totalProduction, 0) AS totalProduction,
-      COALESCE(aggr.cropCount, 0) AS cropCount
-    FROM mas_tehsil t
-
-    ${
-      useMatchedJoin
-        ? `JOIN (
-             SELECT DISTINCT ef.tehsilId
-             FROM eligible_farmers ef
-           ) matched
-             ON matched.tehsilId = t.Rev_teh_id`
-        : ""
-    }
-
-    LEFT JOIN (
-      SELECT
-        ef.tehsilId,
-        COUNT(DISTINCT ef.uf_id) AS totalFarmers
-      FROM eligible_farmers ef
-      GROUP BY ef.tehsilId
-    ) fcnt
-      ON fcnt.tehsilId = t.Rev_teh_id
-
-    LEFT JOIN (
-      SELECT
-        ef.tehsilId,
-        CAST(SUM(ld.land_area) AS DECIMAL(18,3)) AS totalArea,
-        CAST(SUM(cd.crop_area * 19) AS DECIMAL(18,3)) AS totalProduction,
-        COUNT(DISTINCT cd.crop_code) AS cropCount
-      FROM eligible_farmers ef
-      JOIN land_details ld
-        ON ef.uf_id = ld.uf_id
-      JOIN crop_details cd
-        ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
-      GROUP BY ef.tehsilId
-    ) aggr
-      ON aggr.tehsilId = t.Rev_teh_id
-
-    WHERE t.Rev_dist_id = ?
-
-    ORDER BY t.Rev_teh_id;
-  `;
+  const query = FarmerQueries.tehsilSummary({
+    cropCode,
+    farmerConditions,
+    cropFilter,
+    useMatchedJoin,
+  });
 
   params.push(Number(districtId));
 
+  if (cropCode) {
+    params.push(Number(cropCode));
+  }
   if (cropCode) {
     params.push(Number(cropCode));
   }
@@ -290,9 +157,15 @@ async function getTehsilSummary(cropCode, farmerType, districtId) {
         new FarmerTableDTO(
           Number(row.id),
           row.name,
+
           Number(row.totalFarmers) || 0,
+
           Number(row.totalArea) || 0,
+          Number(row.cropArea) || 0,
+
           Number(row.totalProduction) || 0,
+          Number(row.cropProduction) || 0,
+
           Number(row.cropCount) || 0
         )
     );
@@ -343,101 +216,23 @@ async function getVillageSummary(cropCode, farmerType, districtId, tehsilNo) {
   }
 
   const cropFilter = cropCode ? " AND cd.crop_code = ? " : "";
-  const useMatchedJoin = cropCode || farmerType;
+  const useMatchedJoin = cropCode || farmerType || districtId || tehsilNo;
 
-  const query = `
-    WITH eligible_farmers AS (
-      SELECT
-        f.uf_id,
-        v.vsr_census AS villageId,
-        fa.totalLand
-      FROM mas_farmer f
-      JOIN (
-        SELECT
-          uf_id,
-          SUM(ld.land_area) AS totalLand
-        FROM land_details ld
-        GROUP BY uf_id
-      ) fa
-        ON f.uf_id = fa.uf_id
-      JOIN mas_villages v
-        ON f.village_code = v.vsr_census
-      JOIN mas_tehsil t
-        ON v.tehsilno = t.Rev_teh_id
-       AND v.distno = t.Rev_dist_id
-      ${
-        cropCode
-          ? `JOIN land_details ld
-               ON f.uf_id = ld.uf_id
-             JOIN crop_details cd
-               ON cd.id_masterkey_khasra = ld.id_masterkey_khasra`
-          : ""
-      }
-      WHERE
-        v.distno = ?
-        AND v.tehsilno = ?
-        ${cropFilter}
-        ${farmerConditions}
-      GROUP BY
-        f.uf_id,
-        v.vsr_census,
-        fa.totalLand
-    )
-
-    SELECT
-      v.vsr_census AS id,
-      v.villcdname AS name,
-      COALESCE(fcnt.totalFarmers, 0) AS totalFarmers,
-      COALESCE(aggr.totalArea, 0) AS totalArea,
-      COALESCE(aggr.totalProduction, 0) AS totalProduction,
-      COALESCE(aggr.cropCount, 0) AS cropCount
-    FROM mas_villages v
-
-    ${
-      useMatchedJoin
-        ? `JOIN (
-             SELECT DISTINCT ef.villageId
-             FROM eligible_farmers ef
-           ) matched
-             ON matched.villageId = v.vsr_census`
-        : ""
-    }
-
-    LEFT JOIN (
-      SELECT
-        ef.villageId,
-        COUNT(DISTINCT ef.uf_id) AS totalFarmers
-      FROM eligible_farmers ef
-      GROUP BY ef.villageId
-    ) fcnt
-      ON fcnt.villageId = v.vsr_census
-
-    LEFT JOIN (
-      SELECT
-        ef.villageId,
-        CAST(SUM(ld.land_area) AS DECIMAL(18,3)) AS totalArea,
-        CAST(SUM(cd.crop_area * 19) AS DECIMAL(18,3)) AS totalProduction,
-        COUNT(DISTINCT cd.crop_code) AS cropCount
-      FROM eligible_farmers ef
-      JOIN land_details ld
-        ON ef.uf_id = ld.uf_id
-      JOIN crop_details cd
-        ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
-      GROUP BY ef.villageId
-    ) aggr
-      ON aggr.villageId = v.vsr_census
-
-    WHERE
-      v.distno = ?
-      AND v.tehsilno = ?
-
-    ORDER BY v.villcdname;
-  `;
+  const query = FarmerQueries.villageSummary({
+    cropCode,
+    farmerConditions,
+    cropFilter,
+    useMatchedJoin,
+  });
 
   params.push(Number(districtId), Number(tehsilNo));
 
   if (cropCode) {
-    params.push(Number(cropCode));
+    params.push(Number(cropCode));  //eligible_farmers
+  }
+
+  if (cropCode) {
+    params.push(Number(cropCode)); // crop_aggr
   }
 
   params.push(Number(districtId), Number(tehsilNo));
@@ -446,13 +241,19 @@ async function getVillageSummary(cropCode, farmerType, districtId, tehsilNo) {
     const [rows] = await digitalAgriPool.query(query, params);
 
     const items = rows.map(
-      (row) =>
+      row =>
         new FarmerTableDTO(
           Number(row.id),
           row.name,
+
           Number(row.totalFarmers) || 0,
+
           Number(row.totalArea) || 0,
+          Number(row.cropArea) || 0,
+
           Number(row.totalProduction) || 0,
+          Number(row.cropProduction) || 0,
+
           Number(row.cropCount) || 0
         )
     );
