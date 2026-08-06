@@ -22,18 +22,22 @@ class ProductionTrendDTO {
 }
 
 class DistrictCropDTO {
-  constructor(cropCode, cropName, cropCount) {
+  constructor(cropCode, cropName, cropCount, cropArea, cropProduction) {
     this.cropCode = cropCode;
     this.cropName = cropName;
     this.cropCount = cropCount;
+    this.cropArea = cropArea;
+    this.cropProduction = cropProduction;
   }
 }
 
 class DistrictCropHeatmapDTO {
-  constructor(districtId, districtName, totalCropCount , crops=[]) {
+  constructor(districtId, districtName, totalCropCount, totalArea, totalProduction, crops = []) {
     this.districtId = districtId;
     this.districtName = districtName;
-    this.totalCropCount  = totalCropCount ;
+    this.totalCropCount = totalCropCount;
+    this.totalArea = totalArea;
+    this.totalProduction = totalProduction;
     this.crops = crops;
   }
 }

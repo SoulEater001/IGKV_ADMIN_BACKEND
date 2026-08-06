@@ -74,7 +74,7 @@ async function getCropList() {
     const [rows] = await digitalAgriPool.query(query);
 
     return rows.map(
-      (row) => new CropDTO(String(row.cropCode), row.cropName)
+      (row) => new CropDTO(Number(row.cropCode), row.cropName)
     );
   } catch (err) {
     console.error("[FilterService:getCropList]", err);
