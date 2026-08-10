@@ -182,6 +182,247 @@ export const executeCreateAdvisory = async (
 
 };
 
+export const executeCreateBulkAdvisories = async (
+    connection,
+    advisories
+) => {
+    const advisoriesByDate = new Map();
+
+    for (const advisory of advisories) {
+
+        if (!advisoriesByDate.has(advisory.advisory_date)) {
+
+            advisoriesByDate.set(
+                advisory.advisory_date,
+                []
+            );
+
+        }
+
+        advisoriesByDate
+            .get(advisory.advisory_date)
+            .push(advisory);
+
+    }
+
+    const advisoryMainIdByDate = new Map();
+
+    for (const [advisoryDate] of advisoriesByDate) {
+
+        const [mainRows] = await connection.query(
+            `
+        SELECT id
+        FROM imd_advisory_main
+        WHERE DATE(advisory_date) = ?
+        LIMIT 1
+        `,
+            [advisoryDate]
+        );
+
+        let advisoryMainId;
+
+        if (mainRows.length > 0) {
+
+            advisoryMainId = mainRows[0].id;
+
+        } else {
+
+            const [result] = await connection.query(
+                `
+            INSERT INTO imd_advisory_main
+            (
+                advisory_date,
+                create_datetime
+            )
+            VALUES (?, NOW())
+            `,
+                [advisoryDate]
+            );
+
+            advisoryMainId = result.insertId;
+
+            await connection.query(
+                `
+            UPDATE imd_advisory_main
+            SET advisory_main_id = ?
+            WHERE id = ?
+            `,
+                [
+                    advisoryMainId,
+                    advisoryMainId
+                ]
+            );
+
+        }
+
+        advisoryMainIdByDate.set(
+            advisoryDate,
+            advisoryMainId
+        );
+
+    }
+
+    // return {
+    //     groupedDates: advisoriesByDate,
+    //     advisoryMainIdByDate
+    // };
+
+    // let detailsInserted = 0;
+    let advisoriesCreated = 0;
+    let languageRowsInserted = 0;
+
+    for (const [advisoryDate, entries] of advisoriesByDate) {
+
+        const advisoryMainId =
+            advisoryMainIdByDate.get(advisoryDate);
+
+
+        for (const advisory of entries) {
+
+
+            // =====================================================
+            // ENGLISH
+            // =====================================================
+
+            const [englishResult] = await connection.query(
+                `
+                INSERT INTO imd_advisory_detail
+                (
+                    advisory_main_id,
+                    advisory_detail_id,
+
+                    state_lg_code,
+                    district_lg_code,
+                    block_lg_code,
+
+                    cat_id,
+                    crop_id,
+                    advisory_type_id,
+
+                    advisory,
+                    language_id
+                )
+                VALUES (
+                    ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?
+                )
+                `,
+                [
+                    advisoryMainId,
+
+                    // temporary value
+                    null,
+
+                    advisory.state_lg_code,
+                    advisory.district_lg_code,
+                    advisory.block_lg_code,
+
+                    advisory.imd_category_id,
+                    advisory.crop_id,
+                    advisory.imd_advisory_type_id,
+
+                    advisory.advisory_en,
+                    2
+                ]
+            );
+
+
+            const advisoryDetailId =
+                englishResult.insertId;
+
+
+            // =====================================================
+            // Set logical advisory ID on English row
+            // =====================================================
+
+            await connection.query(
+                `
+                UPDATE imd_advisory_detail
+                SET advisory_detail_id = ?
+                WHERE id = ?
+                `,
+                [
+                    advisoryDetailId,
+                    advisoryDetailId
+                ]
+            );
+
+
+            // =====================================================
+            // HINDI
+            // =====================================================
+
+            await connection.query(
+                `
+                INSERT INTO imd_advisory_detail
+                (
+                    advisory_main_id,
+                    advisory_detail_id,
+
+                    state_lg_code,
+                    district_lg_code,
+                    block_lg_code,
+
+                    cat_id,
+                    crop_id,
+                    advisory_type_id,
+
+                    advisory,
+                    language_id
+                )
+                VALUES (
+                    ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?
+                )
+                `,
+                [
+                    advisoryMainId,
+
+                    // Same logical ID
+                    advisoryDetailId,
+
+                    advisory.state_lg_code,
+                    advisory.district_lg_code,
+                    advisory.block_lg_code,
+
+                    advisory.imd_category_id,
+                    advisory.crop_id,
+                    advisory.imd_advisory_type_id,
+
+                    advisory.advisory_hi,
+                    1
+                ]
+            );
+
+
+            languageRowsInserted += 2;
+            advisoriesCreated++;
+
+        }
+
+    }
+
+    return {
+        totalReceived: advisories.length,
+
+        groupedDates: [...advisoriesByDate.entries()].map(
+            ([date, entries]) => ({
+                advisory_date: date,
+                advisories: entries.length
+            })
+        ),
+        sample: advisories.slice(0, 3),
+        mainRowsCreated: advisoryMainIdByDate.size,
+
+        advisoriesCreated,
+        languageRowsInserted
+    };
+}
+
 export const executeDeleteAdvisory = async (
     connection,
     advisoryId

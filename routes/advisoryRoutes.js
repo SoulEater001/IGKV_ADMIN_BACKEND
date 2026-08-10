@@ -1,5 +1,5 @@
 import express from 'express'
-import { createAdvisory, getAdvisoriesPaginated, getAdvisoryTypes, createAdvisoryType, updateAdvisoryType, deleteAdvisoryType } from '../controllers/advisoryController.js';
+import { createAdvisory, getAdvisoriesPaginated, createBulkAdvisories, getPreviousAdvisories, getPreviousAdvisoryByDetailId } from '../controllers/advisoryController.js';
 import { updateAdvisory, deleteAdvisory } from '../controllers/advisoryController.js';
 import { authenticate, authorize, authorizePermissions } from '../middleware/authMiddleware.js'
 import { ROLE_GROUPS } from '../utils/approval.js';
@@ -11,15 +11,6 @@ router.use(authenticate)
 router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL))
 
 router.get(
-    "/types",
-    authorizePermissions(
-        PERMISSION_RESOURCES.ADVISORY_TYPES,
-        PERMISSION_ACTIONS.READ
-    ),
-    getAdvisoryTypes
-);
-
-router.get(
     "/paginated",
     authorizePermissions(
         PERMISSION_RESOURCES.ADVISORIES,
@@ -28,31 +19,22 @@ router.get(
     getAdvisoriesPaginated
 );
 
-router.post(
-    "/types/create",
+router.get(
+    "/previous",
     authorizePermissions(
-        PERMISSION_RESOURCES.ADVISORY_TYPES,
-        PERMISSION_ACTIONS.CREATE
+        PERMISSION_RESOURCES.ADVISORIES,
+        PERMISSION_ACTIONS.READ
     ),
-    createAdvisoryType
+    getPreviousAdvisories
 );
 
-router.put(
-    "/types/:id",
+router.get(
+    "/previous/:advisoryDetailId",
     authorizePermissions(
-        PERMISSION_RESOURCES.ADVISORY_TYPES,
-        PERMISSION_ACTIONS.UPDATE
+        PERMISSION_RESOURCES.ADVISORIES,
+        PERMISSION_ACTIONS.READ
     ),
-    updateAdvisoryType
-);
-
-router.delete(
-    "/types/:id",
-    authorizePermissions(
-        PERMISSION_RESOURCES.ADVISORY_TYPES,
-        PERMISSION_ACTIONS.DELETE
-    ),
-    deleteAdvisoryType
+    getPreviousAdvisoryByDetailId 
 );
 
 router.post(
@@ -62,6 +44,15 @@ router.post(
         PERMISSION_ACTIONS.CREATE
     ),
     createAdvisory
+);
+
+router.post(
+    "/bulk-create",
+    authorizePermissions(
+        PERMISSION_RESOURCES.ADVISORIES,
+        PERMISSION_ACTIONS.CREATE
+    ),
+    createBulkAdvisories
 );
 
 router.put(

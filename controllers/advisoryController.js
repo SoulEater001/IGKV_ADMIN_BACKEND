@@ -4,7 +4,7 @@ import { ENTITIES } from "../constant/activityEntities.js";
 import { logActivity } from '../utils/activityLogger.js'
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
 import { requiresApproval } from '../utils/approval.js'
-import { executeCreateAdvisory, executeCreateAdvisoryType, executeDeleteAdvisory, executeDeleteAdvisoryType, executeUpdateAdvisory, executeUpdateAdvisoryType } from "../services/advisoryService.js";
+import { executeCreateAdvisory, executeCreateBulkAdvisories, executeDeleteAdvisory, executeUpdateAdvisory } from "../services/advisoryService.js";
 import validateLocationHierarchy from '../utils/validateLocationHierarchy.js'
 
 
@@ -46,7 +46,7 @@ export const getAdvisoriesPaginated = async (req, res) => {
 
         }
 
-        if (!stateLgCode  || !languageId) {
+        if (!stateLgCode || !languageId) {
             return res.status(400).json({
                 success: false,
                 message: "State and language is required.",
@@ -232,450 +232,464 @@ export const getAdvisoriesPaginated = async (req, res) => {
     }
 };
 
-export const getAdvisoryTypes = async (req, res) => {
-    try {
-        const [rows] = await pool.query(`
-            SELECT
-                id,
-                imd_advisory_type_id,
-                imd_advisory_type_name,
-                imd_advisory_type_name_h
-            FROM imd_advisory_type
-            ORDER BY id ASC
-        `);
+export const getPreviousAdvisories = async (req, res) => {
 
-        res.json({
+    try {
+
+        const {
+            stateLgCode,
+            districtLgCodes,
+            blockLgCodes,
+            languageId,
+            months
+        } = req.query;
+        // console.log(req.query)
+        console.log(districtLgCodes)
+
+        if (!stateLgCode || !languageId || !months) {
+
+            return res.status(400).json({
+                success: false,
+                message: "State, language and month are required."
+            });
+
+        }
+
+        const monthList = String(months)
+            .split(',')
+            .map(Number)
+            .filter(
+                month =>
+                    Number.isInteger(month) &&
+                    month >= 1 &&
+                    month <= 12
+            );
+
+        if (monthList.length === 0) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid month."
+            });
+
+        }
+
+        const districtList = districtLgCodes
+            ? String(districtLgCodes)
+                .split(',')
+                .map(Number)
+                .filter(Number.isInteger)
+            : [];
+
+        const blockList = blockLgCodes
+            ? String(blockLgCodes)
+                .split(',')
+                .map(Number)
+                .filter(Number.isInteger)
+            : [];
+
+        const where = [
+            "d.state_lg_code = ?",
+            "d.language_id = ?"
+        ];
+
+        const params = [
+            stateLgCode,
+            languageId
+        ];
+
+        if (districtList.length > 0) {
+
+            where.push(
+                `d.district_lg_code IN (${districtList
+                    .map(() => '?')
+                    .join(', ')})`
+            );
+
+            params.push(...districtList);
+
+        }
+
+        if (blockList.length > 0) {
+
+            where.push(
+                `d.block_lg_code IN (${blockList
+                    .map(() => '?')
+                    .join(', ')})`
+            );
+
+            params.push(...blockList);
+
+        }
+
+        where.push(
+            `MONTH(m.advisory_date) IN (${monthList
+                .map(() => '?')
+                .join(', ')})`
+        );
+
+        params.push(...monthList);
+
+        const [rows] = await pool.query(
+            `
+            SELECT
+                d.id,
+                d.advisory_detail_id,
+                d.advisory,
+                d.language_id,
+
+                d.state_lg_code,
+                d.district_lg_code,
+                d.block_lg_code,
+
+                d.cat_id AS imd_category_id,
+                c.img_category_name AS category,
+
+                d.crop_id AS imd_crop_id,
+                cr.imd_crop_name,
+                cr.imd_crop_name_h,
+
+                d.advisory_type_id AS imd_advisory_type_id,
+                at.imd_advisory_type_name AS advisory_type,
+
+                m.advisory_date,
+                m.create_datetime
+
+            FROM imd_advisory_detail d
+
+            JOIN imd_advisory_main m
+                ON d.advisory_main_id = m.id
+
+            LEFT JOIN imd_m_category c
+                ON d.cat_id = c.imd_category_id
+
+            LEFT JOIN imd_m_crop cr
+                ON d.crop_id = cr.imd_crop_id
+
+            LEFT JOIN imd_advisory_type at
+                ON d.advisory_type_id = at.imd_advisory_type_id
+
+            WHERE ${where.join('\nAND ')}
+
+            ORDER BY
+                m.advisory_date DESC,
+                d.id DESC
+
+            LIMIT 100
+            `,
+            params
+        );
+
+        return res.status(200).json({
             success: true,
-            data: rows,
-            count: rows.length
+            data: rows
         });
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            "Error fetching previous advisories:",
+            error
+        );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: "Failed to fetch advisory types."
+            message: "Failed to fetch previous advisories."
         });
 
     }
+
 };
 
-export const createAdvisoryType = async (req, res) => {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        const {
-            imd_advisory_type_name,
-            imd_advisory_type_name_h
-        } = req.body;
+export const getPreviousAdvisoryByDetailId = async (req, res) => {
 
-        if (!imd_advisory_type_name?.trim() || !imd_advisory_type_name_h.trim()) {
-            await connection.rollback();
+    try {
+
+        const { advisoryDetailId } = req.params;
+
+        if (!advisoryDetailId) {
+
             return res.status(400).json({
                 success: false,
-                message: "Advisory type name is required."
+                message: "Advisory detail ID is required."
             });
+
         }
 
-        const advisoryTypeData = {
-            imd_advisory_type_name: imd_advisory_type_name.trim(),
-            imd_advisory_type_name_h:
-                imd_advisory_type_name_h?.trim() || null
-        };
-
-        const [[existing]] = await connection.query(
+        const [rows] = await pool.query(
             `
-            SELECT id
-            FROM imd_advisory_type
-            WHERE imd_advisory_type_name = ?
+            SELECT
+                d.id,
+                d.advisory_detail_id,
+
+                d.state_lg_code,
+                d.district_lg_code,
+                d.block_lg_code,
+
+                d.cat_id AS imd_category_id,
+                d.crop_id,
+
+                d.advisory_type_id AS imd_advisory_type_id,
+
+                d.advisory,
+                d.language_id,
+
+                m.advisory_date
+
+            FROM imd_advisory_detail d
+
+            JOIN imd_advisory_main m
+                ON d.advisory_main_id = m.id
+
+            WHERE d.advisory_detail_id = ?
+
+            ORDER BY d.language_id DESC
             `,
-            [advisoryTypeData.imd_advisory_type_name]
+            [advisoryDetailId]
         );
 
-        if (existing) {
+        if (rows.length === 0) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Previous advisory not found."
+            });
+
+        }
+
+        const english = rows.find(
+            row => row.language_id === 2
+        );
+
+        const hindi = rows.find(
+            row => row.language_id === 1
+        );
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                advisory_detail_id: advisoryDetailId,
+
+                state_lg_code:
+                    english?.state_lg_code ??
+                    hindi?.state_lg_code,
+
+                district_lg_code:
+                    english?.district_lg_code ??
+                    hindi?.district_lg_code,
+
+                block_lg_code:
+                    english?.block_lg_code ??
+                    hindi?.block_lg_code,
+
+                imd_category_id:
+                    english?.imd_category_id ??
+                    hindi?.imd_category_id,
+
+                crop_id:
+                    english?.crop_id ??
+                    hindi?.crop_id,
+
+                imd_advisory_type_id:
+                    english?.imd_advisory_type_id ??
+                    hindi?.imd_advisory_type_id,
+
+                advisory_date:
+                    english?.advisory_date ??
+                    hindi?.advisory_date,
+
+                advisory_en: english?.advisory ?? '',
+                advisory_hi: hindi?.advisory ?? ''
+            }
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Error fetching previous advisory:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch previous advisory."
+        });
+
+    }
+
+};
+
+export const createBulkAdvisories = async (req, res) => {
+    const connection = await pool.getConnection();
+
+    try {
+
+        await connection.beginTransaction();
+
+        const { advisories } = req.body;
+
+        if (!Array.isArray(advisories) || advisories.length === 0) {
 
             await connection.rollback();
 
-            return res.status(409).json({
+            return res.status(400).json({
                 success: false,
-                message: "Advisory type already exists."
+                message: "At least one advisory is required."
             });
 
         }
 
-        if (requiresApproval(req.user)) {
+        for (const advisory of advisories) {
 
-            const pending = await hasPendingApproval(
-                connection,
-                ENTITIES.ADVISORY_TYPE,
-                ACTIONS.CREATE,
-                {
-                    imd_advisory_type_name:
-                        advisoryTypeData.imd_advisory_type_name
-                }
-            );
+            const {
+                state_lg_code,
+                district_lg_code,
+                block_lg_code,
+                imd_category_id,
+                crop_id,
+                // language_id,
+                advisory_en,
+                advisory_hi,
+                advisory_date
+            } = advisory;
+            // console.log(crop_id)
 
-            if (pending) {
+            if (
+                !advisory_date ||
+                !advisory_en?.trim() ||
+                !advisory_hi?.trim()
+            ) {
 
                 await connection.rollback();
 
-                return res.status(409).json({
+                return res.status(400).json({
                     success: false,
-                    message: "An advisory type creation request with this name is already pending."
+                    message: "Every advisory must contain date, English text and Hindi text."
                 });
 
             }
 
-            await createApprovalRequest(connection, {
-                resource: ENTITIES.ADVISORY_TYPE,
-                action: ACTIONS.CREATE,
-                payload: advisoryTypeData,
-                requestedBy: req.user.id
-            });
+            if (
+                !validateLocationHierarchy(
+                    state_lg_code,
+                    district_lg_code,
+                    block_lg_code
+                )
+            ) {
 
-            await connection.commit();
+                await connection.rollback();
 
-            await logActivity({
-                userId: req.user.id,
-                action: ACTIONS.CREATE,
-                entity: ENTITIES.ADVISORY_TYPE,
-                entityId: req.user.id,
-                description: `${req.user.name} requested creation of advisory type ${advisoryTypeData.imd_advisory_type_name}`,
-                ipAddress: req.ip
-            });
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid location hierarchy."
+                });
 
-            return res.status(200).json({
-                success: true,
-                approvalRequired: true,
-                message: "Advisory type creation request sent for approval."
-            });
+            }
 
-        } else {
-            const advisoryTypeId =
-                await executeCreateAdvisoryType(
-                    connection,
-                    advisoryTypeData
+            if (imd_category_id != null) {
+
+                const [[category]] = await connection.query(
+                    `
+        SELECT imd_category_id
+        FROM imd_m_category
+        WHERE imd_category_id = ?
+        LIMIT 1
+        `,
+                    [imd_category_id]
                 );
 
-            await connection.commit();
+                if (!category) {
 
-            await logActivity({
-                userId: req.user.id,
-                action: ACTIONS.CREATE,
-                entity: ENTITIES.ADVISORY_TYPE,
-                entityId: advisoryTypeId,
-                description: `${req.user.name} created advisory type ${imd_advisory_type_name.trim()}`,
-                ipAddress: req.ip
-            });
+                    await connection.rollback();
 
-            return res.status(201).json({
-                success: true,
-                message: "Advisory type created successfully.",
-                data: {
-                    id: advisoryTypeId,
-                    imd_advisory_type_id: advisoryTypeId
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid category."
+                    });
+
                 }
-            });
+
+            }
+
+            if (crop_id != null) {
+
+                if (imd_category_id == null) {
+
+                    await connection.rollback();
+
+                    return res.status(400).json({
+                        success: false,
+                        message: "Crop cannot be selected without a category."
+                    });
+
+                }
+
+                const [[crop]] = await connection.query(
+                    `
+        SELECT imd_crop_id
+        FROM imd_m_crop
+        WHERE
+            imd_crop_id = ?
+            AND imd_category_id = ?
+        LIMIT 1
+        `,
+                    [
+                        crop_id,
+                        imd_category_id
+                    ]
+                );
+
+                if (!crop) {
+
+                    await connection.rollback();
+
+                    return res.status(400).json({
+                        success: false,
+                        message: "Selected crop does not belong to the selected category."
+                    });
+
+                }
+
+            }
+
         }
+
+
+        const result = await executeCreateBulkAdvisories(
+            connection,
+            advisories
+        );
+
+        await connection.commit();
+        // await connection.rollback();
+
+        return res.status(201).json({
+            success: true,
+            message: `${result.advisoriesCreated} ${result.advisoriesCreated === 1
+                ? "advisory"
+                : "advisories"
+                } created successfully.`,
+            data: {
+                mainRowsCreated: result.mainRowsCreated,
+                advisoriesCreated: result.advisoriesCreated,
+                languageRowsInserted: result.languageRowsInserted
+            }
+            // data: result
+        });
+
     } catch (error) {
 
         console.error(error);
+
         await connection.rollback();
+
         return res.status(500).json({
             success: false,
-            message: error.message || "Failed to create advisory type."
+            message: "Failed to create advisories."
         });
 
     } finally {
         connection.release();
-    }
-};
-
-export const updateAdvisoryType = async (req, res) => {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        const { id } = req.params;
-
-        const {
-            imd_advisory_type_name,
-            imd_advisory_type_name_h
-        } = req.body;
-
-        if (!imd_advisory_type_name?.trim()) {
-            await connection.rollback();
-            return res.status(400).json({
-                success: false,
-                message: "Advisory type name is required."
-            });
-        }
-
-        const [[advisoryType]] = await connection.query(
-            `
-            SELECT
-                id,
-                imd_advisory_type_name
-            FROM imd_advisory_type
-            WHERE id = ?
-            `,
-            [id]
-        );
-
-        if (!advisoryType) {
-
-            await connection.rollback();
-
-            return res.status(404).json({
-                success: false,
-                message: "Advisory type not found."
-            });
-
-        }
-
-        const [[existing]] = await connection.query(
-            `
-            SELECT id
-            FROM imd_advisory_type
-            WHERE LOWER(imd_advisory_type_name) = LOWER(?)
-              AND id <> ?
-            `,
-            [
-                imd_advisory_type_name.trim(),
-                id
-            ]
-        );
-
-        if (existing) {
-
-            await connection.rollback();
-
-            return res.status(409).json({
-                success: false,
-                message: "Advisory type already exists."
-            });
-
-        }
-        const advisoryTypeData = {
-
-            id: Number(id),
-
-            imd_advisory_type_name:
-                imd_advisory_type_name.trim(),
-
-            imd_advisory_type_name_h:
-                imd_advisory_type_name_h?.trim() || null
-
-        };
-
-        if (requiresApproval(req.user)) {
-
-            const pending = await hasPendingApproval(
-                connection,
-                ENTITIES.ADVISORY_TYPE,
-                ACTIONS.UPDATE,
-                {
-                    id: Number(id)
-                }
-            );
-
-            if (pending) {
-
-                await connection.rollback();
-
-                return res.status(409).json({
-                    success: false,
-                    message: "An advisory type update request is already pending."
-                });
-
-            }
-
-            await createApprovalRequest(
-                connection,
-                {
-                    resource: ENTITIES.ADVISORY_TYPE,
-                    action: ACTIONS.UPDATE,
-                    recordId: Number(id),
-                    payload: advisoryTypeData,
-                    requestedBy: req.user.id
-                }
-            );
-
-            await connection.commit();
-
-            await logActivity({
-                userId: req.user.id,
-                action: ACTIONS.UPDATE,
-                entity: ENTITIES.ADVISORY_TYPE,
-                entityId: Number(id),
-                description: `${req.user.name} requested update of advisory type ${imd_advisory_type_name.trim()}`,
-                ipAddress: req.ip
-            });
-
-            return res.status(202).json({
-                success: true,
-                approvalRequired: true,
-                message: "Advisory type update submitted for approval."
-            });
-
-        } else {
-            await executeUpdateAdvisoryType(
-                connection,
-                advisoryTypeData
-            );
-
-            await connection.commit();
-            await logActivity({
-                userId: req.user.id,
-                action: ENTITIES.UPDATE,
-                entity: ENTITIES.ADVISORY_TYPE,
-                entityId: Number(id),
-                description: `${req.user.name} updated advisory type ${imd_advisory_type_name.trim()}`,
-                ipAddress: req.ip
-            });
-
-            return res.status(200).json({
-                success: true,
-                message: "Advisory type updated successfully."
-            });
-        }
-    } catch (error) {
-        await connection.rollback();
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to update advisory type."
-        });
-
-    } finally { connection.release(); }
-};
-
-export const deleteAdvisoryType = async (req, res) => {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        const { id } = req.params;
-
-        // Check if advisory type exists
-        const [[advisoryType]] = await connection.query(
-            `
-            SELECT id, imd_advisory_type_name
-            FROM imd_advisory_type
-            WHERE id = ?
-            `,
-            [id]
-        );
-
-        if (!advisoryType) {
-            await connection.rollback();
-            return res.status(404).json({
-                success: false,
-                message: "Advisory type not found."
-            });
-        }
-
-        // Check if it is being used
-        const [[usage]] = await connection.query(
-            `
-            SELECT COUNT(*) AS total
-            FROM imd_advisory_detail
-            WHERE advisory_type_id = ?
-            `,
-            [id]
-        );
-
-        if (usage.total > 0) {
-            await connection.rollback();
-            return res.status(409).json({
-                success: false,
-                message: "Cannot delete advisory type because it is used by existing advisories."
-            });
-        }
-
-        const payload = {
-            id: advisoryType.id,
-            imd_advisory_type_name: advisoryType.imd_advisory_type_name
-        };
-
-        if (requiresApproval(req.user)) {
-
-            const pending = await hasPendingApproval(
-                connection,
-                ENTITIES.ADVISORY_TYPE,
-                ACTIONS.DELETE,
-                {
-                    id: advisoryType.id
-                }
-            );
-
-            if (pending) {
-
-                await connection.rollback();
-
-                return res.status(409).json({
-                    success: false,
-                    message: "A delete request for this advisory type is already pending."
-                });
-
-            }
-
-            await createApprovalRequest(connection, {
-                resource: ENTITIES.ADVISORY_TYPE,
-                action: ACTIONS.DELETE,
-                recordId: advisoryType.id,
-                payload,
-                requestedBy: req.user.id
-            });
-
-            await connection.commit();
-
-            await logActivity({
-                userId: req.user.id,
-                action: ACTIONS.DELETE,
-                entity: ENTITIES.ADVISORY_TYPE,
-                entityId: advisoryType.id,
-                description: `${req.user.name} requested deletion of advisory type ${advisoryType.imd_advisory_type_name}`,
-                ipAddress: req.ip
-            });
-
-            return res.status(200).json({
-                success: true,
-                approvalRequired: true,
-                message: "Advisory type deletion request sent for approval."
-            });
-
-        } else {
-            const advisoryTypeId = await executeDeleteAdvisoryType(
-                connection,
-                advisoryType.id
-            );
-
-            await connection.commit();
-            await logActivity({
-                userId: req.user.id,
-                action: ACTIONS.DELETE,
-                entity: ENTITIES.ADVISORY_TYPE,
-                entityId: advisoryTypeId,
-                description: `${req.user.name} deleted advisory type ${advisoryType.imd_advisory_type_name}`,
-                ipAddress: req.ip
-            });
-
-            return res.status(200).json({
-                success: true,
-                message: "Advisory type deleted successfully."
-            });
-        }
-    } catch (error) {
-        console.error(error);
-        await connection.rollback();
-        return res.status(500).json({
-            success: false,
-            message: "Failed to delete advisory type."
-        });
-    } finally {
-        await connection.release();
     }
 };
 
