@@ -101,6 +101,7 @@ export const createUser = async (req, res) => {
             !Array.isArray(role_ids) ||
             role_ids.length === 0
         ) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Name, email, password and role are required."
@@ -117,6 +118,7 @@ export const createUser = async (req, res) => {
         );
 
         if (existing) {
+            await connection.rollback();
             return res.status(409).json({
                 success: false,
                 message: "Email already exists."

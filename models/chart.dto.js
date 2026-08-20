@@ -7,10 +7,16 @@ class CropDistributionDTO {
 }
 
 class DistrictDistributionDTO {
-  constructor(districtId, districtName, farmerCount) {
+  constructor(
+    districtId,
+    districtName,
+    cropArea,
+    cropProduction
+  ) {
     this.districtId = districtId;
     this.districtName = districtName;
-    this.farmerCount = farmerCount;
+    this.cropArea = cropArea;
+    this.cropProduction = cropProduction;
   }
 }
 

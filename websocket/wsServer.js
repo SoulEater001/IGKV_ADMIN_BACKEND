@@ -1,10 +1,10 @@
-import WebSocket from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import { attachWebSocketBroadcast, sendCommand } from "../middleware/mqttClient.js";
 import { updateDeviceInterval } from "../services/db.service.js";
 
 function initWS(server) {
   // Create WebSocket server on top of the existing HTTP server
-  const wss = new WebSocket.Server({ server });
+  const wss = new WebSocketServer({ server });
 
   console.log("✔ WebSocket Server Running");
 
@@ -72,21 +72,32 @@ function initWS(server) {
   });
 
   // MQTT → WS bridge (send data to subscribed WS clients)
-  attachWebSocketBroadcast(({ topic, data, deviceId }) => {
-    const type = topic.split("/")[2];
+  attachWebSocketBroadcast(
+    ({ topic, type, data, deviceId, timestamp }) => {
 
-    wss.clients.forEach((ws) => {
-      if (ws.readyState === WebSocket.OPEN && ws.subscriptions.has(deviceId)) {
-        ws.send(
-          JSON.stringify({
-            deviceId,
-            type,
-            data,
-          }),
-        );
-      }
-    });
-  });
+      wss.clients.forEach((ws) => {
+
+        if (
+          ws.readyState === WebSocket.OPEN &&
+          ws.subscriptions.has(deviceId)
+        ) {
+
+          ws.send(
+            JSON.stringify({
+              deviceId,
+              topic,
+              type,
+              data,
+              timestamp
+            })
+          );
+
+        }
+
+      });
+
+    }
+  );
 }
 
 export default initWS;

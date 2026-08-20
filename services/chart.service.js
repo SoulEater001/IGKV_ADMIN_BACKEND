@@ -42,52 +42,75 @@ async function getCropDistribution() {
   }
 }
 
-async function getDistrictDistribution() {
+async function getDistrictDistribution(cropCode = null) {
+  const params = [];
+  console.log(cropCode)
+  let cropFilter = '';
+
+  if (cropCode !== null && cropCode !== undefined) {
+    cropFilter = `
+      AND cd.crop_code = ?
+    `;
+
+    params.push(cropCode);
+  }
+
   const query = `
     SELECT
       d.Rev_district_id AS districtId,
-      d.District_Name AS districtName,
-      COUNT(DISTINCT f.uf_id) AS farmerCount
-    FROM mas_farmer f
-    JOIN mas_villages v
+      d.District_Name_Eng AS districtName,
+
+      COALESCE(SUM(cd.crop_area), 0) AS cropArea,
+
+      COALESCE(
+        SUM(cd.crop_area * 19),
+        0
+      ) AS cropProduction
+
+    FROM mas_districts d
+
+    LEFT JOIN mas_villages v
+      ON v.distno = d.Rev_district_id
+
+    LEFT JOIN mas_farmer f
       ON f.village_code = v.vsr_census
-    JOIN mas_districts d
-      ON d.Rev_district_id = v.distno
+
+    LEFT JOIN land_details ld
+      ON ld.uf_id = f.uf_id
+
+    LEFT JOIN crop_details cd
+      ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
+      ${cropFilter}
+
     GROUP BY
       d.Rev_district_id,
-      d.District_Name
+      d.District_Name_Eng
+    
+    HAVING
+      COALESCE(SUM(cd.crop_area), 0) > 0
 
-    UNION ALL
-
-    SELECT
-      0 AS districtId,
-      'Unknown' AS districtName,
-      COUNT(DISTINCT f.uf_id) AS farmerCount
-    FROM mas_farmer f
-    LEFT JOIN mas_villages v
-      ON f.village_code = v.vsr_census
-    LEFT JOIN mas_districts d
-      ON d.Rev_district_id = v.distno
-    WHERE d.Rev_district_id IS NULL
-    HAVING COUNT(DISTINCT f.uf_id) > 0
-
-    ORDER BY farmerCount DESC;
+    ORDER BY cropProduction DESC;
   `;
 
   try {
-    const [rows] = await digitalAgriPool.query(query);
+    const [rows] = await digitalAgriPool.query(query, params);
 
     return rows.map(
       (row) =>
         new DistrictDistributionDTO(
           Number(row.districtId),
           row.districtName,
-          Number(row.farmerCount) || 0
+          Number(row.cropArea) || 0,
+          Number(row.cropProduction) || 0
         )
     );
   } catch (err) {
-    console.error("[ChartService:getDistrictDistribution] Error:", err.message);
-    throw new Error("Database query failed");
+    console.error(
+      '[ChartService:getDistrictDistribution] Error:',
+      err.message
+    );
+
+    throw new Error('Database query failed');
   }
 }
 

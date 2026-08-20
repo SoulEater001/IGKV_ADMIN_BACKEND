@@ -1,17 +1,60 @@
-function validateLocationHierarchy(state, district, block) {
+function isValidLgCode(value) {
+    return (
+        value !== null &&
+        value !== undefined &&
+        value !== '' &&
+        Number.isInteger(Number(value)) &&
+        Number(value) > 0
+    );
+}
 
-    // State advisory
-    if (state && !district && !block) {
+function isEmpty(value) {
+    return (
+        value === null ||
+        value === undefined ||
+        value === ''
+    );
+}
+
+function validateLocationHierarchy(
+    state,
+    district,
+    block
+) {
+    const hasState = isValidLgCode(state);
+
+    const hasDistrict = isValidLgCode(district);
+
+    const hasBlock = isValidLgCode(block);
+
+    const districtEmpty = isEmpty(district);
+
+    const blockEmpty = isEmpty(block);
+
+    // State level
+    if (
+        hasState &&
+        districtEmpty &&
+        blockEmpty
+    ) {
         return true;
     }
 
-    // District advisory
-    if (state && district && !block) {
+    // District level
+    if (
+        hasState &&
+        hasDistrict &&
+        blockEmpty
+    ) {
         return true;
     }
 
-    // Block advisory
-    if (state && district && block) {
+    // Block level
+    if (
+        hasState &&
+        hasDistrict &&
+        hasBlock
+    ) {
         return true;
     }
 

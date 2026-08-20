@@ -11,27 +11,36 @@ async function createDevice(body) {
   const {
     deviceId,
     deviceName = null,
-    deviceType,
+    userName = null,
+    deviceType= null,
+    mobileNo = null,
     firmwareVersion = null,
+    connectionType = null,
   } = body;
 
   const query = `
     INSERT INTO iot_devices
-      (deviceId, deviceName, deviceType, firmwareVersion)
-    VALUES (?, ?, ?, ?)
+      (deviceId, deviceName, userName, mobileNo, deviceType, firmwareVersion)
+    VALUES (?, ?, ?, ?, ?, ?)
   `;
 
   await digitalAgriPool.query(query, [
     deviceId,
     deviceName,
+    userName,
+    mobileNo,
     deviceType,
-    firmwareVersion,
+    firmwareVersion
   ]);
 
   return {
     deviceId,
     deviceName,
     deviceType,
+    userName, 
+    mobileNo,
+    firmwareVersion,
+    // connectionType,
   };
 }
 

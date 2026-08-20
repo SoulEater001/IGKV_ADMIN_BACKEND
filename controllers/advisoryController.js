@@ -352,7 +352,10 @@ export const getPreviousAdvisories = async (req, res) => {
                 d.advisory_type_id AS imd_advisory_type_id,
                 at.imd_advisory_type_name AS advisory_type,
 
-                m.advisory_date,
+                DATE_FORMAT(
+                    m.advisory_date,
+                    '%Y-%m-%d'
+                ) AS advisory_date,
                 m.create_datetime
 
             FROM imd_advisory_detail d
@@ -395,6 +398,676 @@ export const getPreviousAdvisories = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Failed to fetch previous advisories."
+        });
+
+    }
+
+};
+
+export const getPreviousAdvisoryOptions = async (req, res) => {
+
+    try {
+
+        const {
+            stateLgCode,
+            districtLgCodes,
+            blockLgCodes,
+            dates
+        } = req.query;
+
+        console.log(req.query)
+        // -------------------------------------------------
+        // Validation
+        // -------------------------------------------------
+
+        if (!stateLgCode || !dates) {
+
+            return res.status(400).json({
+                success: false,
+                message: 'State and dates are required.'
+            });
+
+        }
+
+
+        // -------------------------------------------------
+        // Parse selected dates
+        //
+        // Expected:
+        //
+        // dates=2026-07-10,2026-07-15
+        // -------------------------------------------------
+
+        const dateList = String(dates)
+            .split(',')
+            .map(value => value.trim())
+            .filter(Boolean);
+
+
+        if (dateList.length === 0) {
+
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid dates.'
+            });
+
+        }
+
+
+        // -------------------------------------------------
+        // Build unique current year + previous year periods
+        //
+        // Example:
+        //
+        // Selected:
+        // 2026-07-10
+        // 2026-07-15
+        //
+        // Search:
+        //
+        // July 2026
+        // July 2025
+        // -------------------------------------------------
+
+        const monthYearMap = new Map();
+
+
+        for (const value of dateList) {
+
+            const date = new Date(`${value}T00:00:00`);
+
+
+            if (Number.isNaN(date.getTime())) {
+                continue;
+            }
+
+
+            const month = date.getMonth() + 1;
+
+            const currentYear = date.getFullYear();
+
+            const previousYear = currentYear - 1;
+
+
+            // Current year
+
+            monthYearMap.set(
+                `${currentYear}-${month}`,
+                {
+                    year: currentYear,
+                    month
+                }
+            );
+
+
+            // Previous year
+
+            monthYearMap.set(
+                `${previousYear}-${month}`,
+                {
+                    year: previousYear,
+                    month
+                }
+            );
+
+        }
+
+
+        const targetPeriods = [
+            ...monthYearMap.values()
+        ];
+
+
+        if (targetPeriods.length === 0) {
+
+            return res.status(400).json({
+                success: false,
+                message: 'No valid date periods found.'
+            });
+
+        }
+
+
+        // -------------------------------------------------
+        // Parse district LG codes
+        // -------------------------------------------------
+
+        const districtList = districtLgCodes
+            ? String(districtLgCodes)
+                .split(',')
+                .map(Number)
+                .filter(Number.isInteger)
+            : [];
+
+
+        // -------------------------------------------------
+        // Parse block LG codes
+        // -------------------------------------------------
+
+        const blockList = blockLgCodes
+            ? String(blockLgCodes)
+                .split(',')
+                .map(Number)
+                .filter(Number.isInteger)
+            : [];
+
+
+        // -------------------------------------------------
+        // Base WHERE conditions
+        // -------------------------------------------------
+
+        const where = [
+            'd.state_lg_code = ?'
+        ];
+
+
+        const params = [
+            Number(stateLgCode)
+        ];
+
+
+        // -------------------------------------------------
+        // District filter
+        // -------------------------------------------------
+
+        if (districtList.length > 0) {
+
+            where.push(
+                `
+                d.district_lg_code IN (
+                    ${districtList
+                    .map(() => '?')
+                    .join(', ')}
+                )
+                `
+            );
+
+            params.push(...districtList);
+
+        }
+
+
+        // -------------------------------------------------
+        // Block filter
+        // -------------------------------------------------
+
+        if (blockList.length > 0) {
+
+            where.push(
+                `
+                d.block_lg_code IN (
+                    ${blockList
+                    .map(() => '?')
+                    .join(', ')}
+                )
+                `
+            );
+
+            params.push(...blockList);
+
+        }
+
+
+        // -------------------------------------------------
+        // Current year + previous year month conditions
+        //
+        // Example:
+        //
+        // (
+        //     (
+        //         YEAR(m.advisory_date) = 2026
+        //         AND MONTH(m.advisory_date) = 7
+        //     )
+        //
+        //     OR
+        //
+        //     (
+        //         YEAR(m.advisory_date) = 2025
+        //         AND MONTH(m.advisory_date) = 7
+        //     )
+        // )
+        // -------------------------------------------------
+
+        const periodConditions = targetPeriods
+            .map(() => `
+                (
+                    YEAR(m.advisory_date) = ?
+                    AND MONTH(m.advisory_date) = ?
+                )
+            `)
+            .join(' OR ');
+
+
+        where.push(`
+            (
+                ${periodConditions}
+            )
+        `);
+
+
+        targetPeriods.forEach(period => {
+
+            params.push(
+                period.year,
+                period.month
+            );
+
+        });
+
+
+        // -------------------------------------------------
+        // Query
+        //
+        // Return:
+        //
+        // - unique advisory dates
+        // - number of logical advisories on each date
+        //
+        // COUNT DISTINCT is important because
+        // one logical advisory has English + Hindi rows.
+        // -------------------------------------------------
+
+        const [rows] = await pool.query(
+            `
+            SELECT
+
+               DATE_FORMAT(
+                m.advisory_date,
+                '%Y-%m-%d'
+                ) AS advisoryDate,
+
+                COUNT(
+                    DISTINCT d.advisory_detail_id
+                ) AS advisoryCount
+
+            FROM imd_advisory_detail d
+
+            JOIN imd_advisory_main m
+                ON d.advisory_main_id = m.id
+
+            WHERE ${where.join('\nAND ')}
+
+            GROUP BY
+                m.advisory_date
+
+            ORDER BY
+                m.advisory_date DESC
+            `,
+            params
+        );
+
+
+        return res.status(200).json({
+
+            success: true,
+
+            data: rows
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            'Error fetching previous advisory dates:',
+            error
+        );
+
+
+        return res.status(500).json({
+
+            success: false,
+
+            message:
+                'Failed to fetch previous advisory dates.'
+
+        });
+
+    }
+
+};
+
+export const loadPreviousAdvisories = async (req, res) => {
+
+    try {
+
+        const {
+            advisoryDates,
+            stateLgCode,
+            districtLgCodes,
+            blockLgCodes
+        } = req.query;
+
+
+        // -------------------------------------------------
+        // Validation
+        // -------------------------------------------------
+
+        if (!advisoryDates || !stateLgCode) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    'Advisory dates and state are required.'
+
+            });
+
+        }
+
+
+        // -------------------------------------------------
+        // Parse advisory dates
+        //
+        // Expected:
+        //
+        // advisoryDates=2026-07-15,2025-07-10
+        // -------------------------------------------------
+
+        const dateList = String(advisoryDates)
+            .split(',')
+            .map(value => value.trim())
+            .filter(Boolean);
+
+
+        if (dateList.length === 0) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    'Invalid advisory dates.'
+
+            });
+
+        }
+
+
+        // Remove duplicate dates
+
+        const uniqueDates = [
+            ...new Set(dateList)
+        ];
+
+
+        // -------------------------------------------------
+        // Parse district LG codes
+        // -------------------------------------------------
+
+        const districtList = districtLgCodes
+            ? String(districtLgCodes)
+                .split(',')
+                .map(Number)
+                .filter(Number.isInteger)
+            : [];
+
+
+        // -------------------------------------------------
+        // Parse block LG codes
+        // -------------------------------------------------
+
+        const blockList = blockLgCodes
+            ? String(blockLgCodes)
+                .split(',')
+                .map(Number)
+                .filter(Number.isInteger)
+            : [];
+
+
+        // -------------------------------------------------
+        // Base WHERE conditions
+        // -------------------------------------------------
+
+        const where = [
+
+            `
+            m.advisory_date IN (
+                ${uniqueDates
+                .map(() => '?')
+                .join(', ')}
+            )
+            `,
+
+            'd.state_lg_code = ?'
+
+        ];
+
+
+        const params = [
+
+            ...uniqueDates,
+
+            Number(stateLgCode)
+
+        ];
+
+
+        // -------------------------------------------------
+        // District filter
+        // -------------------------------------------------
+
+        if (districtList.length > 0) {
+
+            where.push(
+
+                `
+                d.district_lg_code IN (
+                    ${districtList
+                    .map(() => '?')
+                    .join(', ')}
+                )
+                `
+
+            );
+
+            params.push(...districtList);
+
+        }
+
+
+        // -------------------------------------------------
+        // Block filter
+        // -------------------------------------------------
+
+        if (blockList.length > 0) {
+
+            where.push(
+
+                `
+                d.block_lg_code IN (
+                    ${blockList
+                    .map(() => '?')
+                    .join(', ')}
+                )
+                `
+
+            );
+
+            params.push(...blockList);
+
+        }
+
+
+        // -------------------------------------------------
+        // Fetch all advisories matching:
+        //
+        // - selected advisory dates
+        // - selected state
+        // - selected districts
+        // - selected blocks
+        //
+        // Both English + Hindi rows are fetched.
+        // -------------------------------------------------
+
+        const [rows] = await pool.query(
+
+            `
+            SELECT
+
+                d.advisory_detail_id,
+
+                d.state_lg_code,
+
+                d.district_lg_code,
+
+                d.block_lg_code,
+
+                d.cat_id AS imd_category_id,
+
+                d.crop_id,
+
+                d.advisory_type_id
+                    AS imd_advisory_type_id,
+
+                d.advisory,
+
+                d.language_id,
+
+                m.advisory_date
+
+            FROM imd_advisory_detail d
+
+            JOIN imd_advisory_main m
+                ON d.advisory_main_id = m.id
+
+            WHERE ${where.join('\nAND ')}
+
+            ORDER BY
+
+                m.advisory_date DESC,
+
+                d.advisory_detail_id ASC,
+
+                d.language_id DESC
+
+            `,
+
+            params
+
+        );
+
+
+        // -------------------------------------------------
+        // Group English + Hindi rows
+        //
+        // One advisory_detail_id
+        // becomes one advisory block.
+        // -------------------------------------------------
+
+        const advisoryMap = new Map();
+
+
+        rows.forEach(row => {
+
+            if (
+
+                !advisoryMap.has(
+                    row.advisory_detail_id
+                )
+
+            ) {
+
+                advisoryMap.set(
+
+                    row.advisory_detail_id,
+
+                    {
+
+                        advisory_detail_id:
+                            row.advisory_detail_id,
+
+                        state_lg_code:
+                            row.state_lg_code,
+
+                        district_lg_code:
+                            row.district_lg_code,
+
+                        block_lg_code:
+                            row.block_lg_code,
+
+                        imd_category_id:
+                            row.imd_category_id,
+
+                        crop_id:
+                            row.crop_id,
+
+                        imd_advisory_type_id:
+                            row.imd_advisory_type_id,
+
+                        advisory_date:
+                            row.advisory_date,
+
+                        advisory_en: '',
+
+                        advisory_hi: ''
+
+                    }
+
+                );
+
+            }
+
+
+            const advisory = advisoryMap.get(
+                row.advisory_detail_id
+            );
+
+
+            // English
+
+            if (row.language_id === 2) {
+
+                advisory.advisory_en =
+                    row.advisory;
+
+            }
+
+
+            // Hindi
+
+            if (row.language_id === 1) {
+
+                advisory.advisory_hi =
+                    row.advisory;
+
+            }
+
+        });
+
+
+        // -------------------------------------------------
+        // Response
+        // -------------------------------------------------
+
+        return res.status(200).json({
+
+            success: true,
+
+            data: Array.from(
+                advisoryMap.values()
+            )
+
+        });
+
+    } catch (error) {
+
+        console.error(
+
+            'Error loading previous advisories:',
+
+            error
+
+        );
+
+
+        return res.status(500).json({
+
+            success: false,
+
+            message:
+                'Failed to load previous advisories.'
+
         });
 
     }

@@ -18,21 +18,20 @@ async function getCropDistribution(req, res) {
 
 async function getDistrictDistribution(req, res) {
   try {
-    const data = await chartService.getDistrictDistribution();
+    const cropCode = req.query.cropCode
+      ? Number(req.query.cropCode)
+      : null;
+    const data = await chartService.getDistrictDistribution(cropCode);
     res
       .status(200)
       .json(new ApiResponse(data, "District distribution fetched", 200, true));
   } catch (err) {
-    res
-      .status(500)
-      .json(
-        new ApiResponse(
-          null,
-          "Failed to fetch district distribution",
-          500,
-          false
-        )
-      );
+
+  console.error(
+      "[getDistrictDistribution] Error:",
+      err.message
+    );
+    res.status(500).json(new ApiResponse(null,"Failed to fetch district distribution",500,false));
   }
 }
 
