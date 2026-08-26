@@ -6,6 +6,7 @@ import { hasPendingApproval, createApprovalRequest } from '../services/approvalS
 import { requiresApproval } from '../utils/approval.js'
 import { executeCreateAdvisory, executeCreateBulkAdvisories, executeDeleteAdvisory, executeUpdateAdvisory } from "../services/advisoryService.js";
 import validateLocationHierarchy from '../utils/validateLocationHierarchy.js'
+import { isValidIsoDate } from "../utils/weatherUtils.js";
 
 
 export const getAdvisoriesPaginated = async (req, res) => {
@@ -233,9 +234,7 @@ export const getAdvisoriesPaginated = async (req, res) => {
 };
 
 export const getPreviousAdvisoryOptions = async (req, res) => {
-
     try {
-
         const {
             stateLgCode,
             districtLgCodes,
@@ -243,81 +242,37 @@ export const getPreviousAdvisoryOptions = async (req, res) => {
             dates
         } = req.query;
 
-        // console.log(req.query)
-        // -------------------------------------------------
-        // Validation
-        // -------------------------------------------------
-
         if (!stateLgCode || !dates) {
-
             return res.status(400).json({
                 success: false,
                 message: 'State and dates are required.'
             });
-
         }
-
-
-        // -------------------------------------------------
-        // Parse selected dates
-        //
-        // Expected:
-        //
-        // dates=2026-07-10,2026-07-15
-        // -------------------------------------------------
 
         const dateList = String(dates)
             .split(',')
             .map(value => value.trim())
             .filter(Boolean);
 
-
         if (dateList.length === 0) {
-
             return res.status(400).json({
                 success: false,
                 message: 'Invalid dates.'
             });
-
         }
-
-
-        // -------------------------------------------------
-        // Build unique current year + previous year periods
-        //
-        // Example:
-        //
-        // Selected:
-        // 2026-07-10
-        // 2026-07-15
-        //
-        // Search:
-        //
-        // July 2026
-        // July 2025
-        // -------------------------------------------------
 
         const monthYearMap = new Map();
 
-
         for (const value of dateList) {
-
             const date = new Date(`${value}T00:00:00`);
-
 
             if (Number.isNaN(date.getTime())) {
                 continue;
             }
 
-
             const month = date.getMonth() + 1;
-
             const currentYear = date.getFullYear();
-
             const previousYear = currentYear - 1;
-
-
-            // Current year
 
             monthYearMap.set(
                 `${currentYear}-${month}`,
@@ -327,9 +282,6 @@ export const getPreviousAdvisoryOptions = async (req, res) => {
                 }
             );
 
-
-            // Previous year
-
             monthYearMap.set(
                 `${previousYear}-${month}`,
                 {
@@ -337,28 +289,16 @@ export const getPreviousAdvisoryOptions = async (req, res) => {
                     month
                 }
             );
-
         }
 
-
-        const targetPeriods = [
-            ...monthYearMap.values()
-        ];
-
+        const targetPeriods = [...monthYearMap.values()];
 
         if (targetPeriods.length === 0) {
-
             return res.status(400).json({
                 success: false,
                 message: 'No valid date periods found.'
             });
-
         }
-
-
-        // -------------------------------------------------
-        // Parse district LG codes
-        // -------------------------------------------------
 
         const districtList = districtLgCodes
             ? String(districtLgCodes)
@@ -367,11 +307,6 @@ export const getPreviousAdvisoryOptions = async (req, res) => {
                 .filter(Number.isInteger)
             : [];
 
-
-        // -------------------------------------------------
-        // Parse block LG codes
-        // -------------------------------------------------
-
         const blockList = blockLgCodes
             ? String(blockLgCodes)
                 .split(',')
@@ -379,82 +314,37 @@ export const getPreviousAdvisoryOptions = async (req, res) => {
                 .filter(Number.isInteger)
             : [];
 
-
-        // -------------------------------------------------
-        // Base WHERE conditions
-        // -------------------------------------------------
-
         const where = [
             'd.state_lg_code = ?'
         ];
-
 
         const params = [
             Number(stateLgCode)
         ];
 
-
-        // -------------------------------------------------
-        // District filter
-        // -------------------------------------------------
-
-        if (districtList.length > 0) {
-
-            where.push(
-                `
-                d.district_lg_code IN (
-                    ${districtList
-                    .map(() => '?')
-                    .join(', ')}
-                )
-                `
-            );
-
-            params.push(...districtList);
-
-        }
-
-
-        // -------------------------------------------------
-        // Block filter
-        // -------------------------------------------------
-
         if (blockList.length > 0) {
 
-            where.push(
-                `
-                d.block_lg_code IN (
-                    ${blockList
-                    .map(() => '?')
-                    .join(', ')}
-                )
-                `
-            );
+            // BLOCK-LEVEL previous advisories
+            where.push(`
+                d.district_lg_code IS NOT NULL
+            `);
 
-            params.push(...blockList);
+            where.push(`
+                d.block_lg_code IS NOT NULL
+            `);
+
+        } else {
+
+            // DISTRICT-LEVEL previous advisories
+            where.push(`
+                d.district_lg_code IS NOT NULL
+            `);
+
+            where.push(`
+                d.block_lg_code IS NULL
+            `);
 
         }
-
-
-        // -------------------------------------------------
-        // Current year + previous year month conditions
-        //
-        // Example:
-        //
-        // (
-        //     (
-        //         YEAR(m.advisory_date) = 2026
-        //         AND MONTH(m.advisory_date) = 7
-        //     )
-        //
-        //     OR
-        //
-        //     (
-        //         YEAR(m.advisory_date) = 2025
-        //         AND MONTH(m.advisory_date) = 7
-        //     )
-        // )
-        // -------------------------------------------------
 
         const periodConditions = targetPeriods
             .map(() => `
@@ -465,48 +355,34 @@ export const getPreviousAdvisoryOptions = async (req, res) => {
             `)
             .join(' OR ');
 
-
         where.push(`
             (
                 ${periodConditions}
             )
         `);
 
-
         targetPeriods.forEach(period => {
-
             params.push(
                 period.year,
                 period.month
             );
-
         });
-
-
-        // -------------------------------------------------
-        // Query
-        //
-        // Return:
-        //
-        // - unique advisory dates
-        // - number of logical advisories on each date
-        //
-        // COUNT DISTINCT is important because
-        // one logical advisory has English + Hindi rows.
-        // -------------------------------------------------
 
         const [rows] = await pool.query(
             `
             SELECT
+                DATE_FORMAT(
+                    m.advisory_date,
+                    '%Y-%m-%d'
+                ) AS advisory_date,
 
-               DATE_FORMAT(
-                m.advisory_date,
-                '%Y-%m-%d'
-                ) AS advisoryDate,
+                d.state_lg_code,
+                d.district_lg_code,
+                d.block_lg_code,
 
                 COUNT(
                     DISTINCT d.advisory_detail_id
-                ) AS advisoryCount
+                ) AS advisory_count
 
             FROM imd_advisory_detail d
 
@@ -516,223 +392,168 @@ export const getPreviousAdvisoryOptions = async (req, res) => {
             WHERE ${where.join('\nAND ')}
 
             GROUP BY
-                m.advisory_date
+                m.advisory_date,
+                d.state_lg_code,
+                d.district_lg_code,
+                d.block_lg_code
 
             ORDER BY
-                m.advisory_date DESC
+                m.advisory_date DESC,
+                d.state_lg_code ASC,
+                d.district_lg_code ASC,
+                d.block_lg_code ASC
             `,
             params
         );
 
+        const data = rows.map(row => ({
+            advisory_date: row.advisory_date,
+
+            state_lg_code:
+                row.state_lg_code !== null
+                    ? Number(row.state_lg_code)
+                    : null,
+
+            district_lg_code:
+                row.district_lg_code !== null
+                    ? Number(row.district_lg_code)
+                    : null,
+
+            block_lg_code:
+                row.block_lg_code !== null
+                    ? Number(row.block_lg_code)
+                    : null,
+
+            advisory_count:
+                Number(row.advisory_count)
+        }));
+
+        console.log(
+            'previous advisory options:',
+            data
+        );
 
         return res.status(200).json({
-
             success: true,
-
-            data: rows
-
+            data
         });
 
     } catch (error) {
-
         console.error(
-            'Error fetching previous advisory dates:',
+            'Error fetching previous advisory options:',
             error
         );
 
-
         return res.status(500).json({
-
             success: false,
-
             message:
-                'Failed to fetch previous advisory dates.'
-
+                'Failed to fetch previous advisory options.'
         });
-
     }
-
 };
 
 export const loadPreviousAdvisories = async (req, res) => {
-
     try {
-
         const {
-            advisoryDates,
-            stateLgCode,
-            districtLgCodes,
-            blockLgCodes
+            advisoryOptions
         } = req.query;
 
+        let options = [];
 
-        // -------------------------------------------------
-        // Validation
-        // -------------------------------------------------
-
-        if (!advisoryDates || !stateLgCode) {
-
+        try {
+            options = advisoryOptions
+                ? JSON.parse(advisoryOptions)
+                : [];
+        } catch {
             return res.status(400).json({
-
                 success: false,
-
-                message:
-                    'Advisory dates and state are required.'
-
+                message: 'Invalid advisoryOptions'
             });
-
         }
 
-
-        // -------------------------------------------------
-        // Parse advisory dates
-        //
-        // Expected:
-        //
-        // advisoryDates=2026-07-15,2025-07-10
-        // -------------------------------------------------
-
-        const dateList = String(advisoryDates)
-            .split(',')
-            .map(value => value.trim())
-            .filter(Boolean);
-
-
-        if (dateList.length === 0) {
-
+        if (
+            !Array.isArray(options) ||
+            options.length === 0
+        ) {
             return res.status(400).json({
-
                 success: false,
-
                 message:
-                    'Invalid advisory dates.'
-
+                    'At least one advisory option is required'
             });
-
         }
 
+        // ------------------------------------------
+        // Validate options
+        // ------------------------------------------
 
-        // Remove duplicate dates
+        for (const option of options) {
+            if (!isValidIsoDate(option.advisory_date)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid advisory date'
+                });
+            }
 
-        const uniqueDates = [
-            ...new Set(dateList)
-        ];
+            if (
+                option.state_lg_code == null ||
+                option.district_lg_code == null
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'State and district LG codes are required'
+                });
+            }
+        }
 
+        // ------------------------------------------
+        // Build exact date + location conditions
+        // ------------------------------------------
 
-        // -------------------------------------------------
-        // Parse district LG codes
-        // -------------------------------------------------
+        const conditions = [];
+        const queryParams = [];
 
-        const districtList = districtLgCodes
-            ? String(districtLgCodes)
-                .split(',')
-                .map(Number)
-                .filter(Number.isInteger)
-            : [];
+        for (const option of options) {
+            let condition = `
+        (
+            DATE(m.advisory_date) = ?
+            AND d.state_lg_code = ?
+            AND d.district_lg_code = ?
+    `;
 
-
-        // -------------------------------------------------
-        // Parse block LG codes
-        // -------------------------------------------------
-
-        const blockList = blockLgCodes
-            ? String(blockLgCodes)
-                .split(',')
-                .map(Number)
-                .filter(Number.isInteger)
-            : [];
-
-
-        // -------------------------------------------------
-        // Base WHERE conditions
-        // -------------------------------------------------
-
-        const where = [
-
-            `
-            m.advisory_date IN (
-                ${uniqueDates
-                .map(() => '?')
-                .join(', ')}
-            )
-            `,
-
-            'd.state_lg_code = ?'
-
-        ];
-
-
-        const params = [
-
-            ...uniqueDates,
-
-            Number(stateLgCode)
-
-        ];
-
-
-        // -------------------------------------------------
-        // District filter
-        // -------------------------------------------------
-
-        if (districtList.length > 0) {
-
-            where.push(
-
-                `
-                d.district_lg_code IN (
-                    ${districtList
-                    .map(() => '?')
-                    .join(', ')}
-                )
-                `
-
+            queryParams.push(
+                option.advisory_date,
+                option.state_lg_code,
+                option.district_lg_code
             );
 
-            params.push(...districtList);
+            if (option.block_lg_code == null) {
+                condition += `
+            AND d.block_lg_code IS NULL
+        `;
+            } else {
+                condition += `
+            AND d.block_lg_code = ?
+        `;
 
+                queryParams.push(
+                    option.block_lg_code
+                );
+            }
+
+            condition += `
+        )
+    `;
+
+            conditions.push(condition);
         }
 
-
-        // -------------------------------------------------
-        // Block filter
-        // -------------------------------------------------
-
-        if (blockList.length > 0) {
-
-            where.push(
-
-                `
-                d.block_lg_code IN (
-                    ${blockList
-                    .map(() => '?')
-                    .join(', ')}
-                )
-                `
-
-            );
-
-            params.push(...blockList);
-
-        }
-
-
-        // -------------------------------------------------
-        // Fetch all advisories matching:
-        //
-        // - selected advisory dates
-        // - selected state
-        // - selected districts
-        // - selected blocks
-        //
-        // Both English + Hindi rows are fetched.
-        // -------------------------------------------------
+        // ------------------------------------------
+        // Fetch advisories
+        // ------------------------------------------
 
         const [rows] = await pool.query(
-
             `
             SELECT
-
                 d.advisory_detail_id,
                 d.state_lg_code,
                 d.district_lg_code,
@@ -743,55 +564,42 @@ export const loadPreviousAdvisories = async (req, res) => {
                 d.advisory_type_id AS imd_advisory_type_id,
                 d.advisory,
                 d.language_id,
-                m.advisory_date
+
+                DATE_FORMAT(
+                    m.advisory_date,
+                    '%Y-%m-%d'
+                ) AS advisory_date
+
             FROM imd_advisory_detail d
 
             JOIN imd_advisory_main m
                 ON d.advisory_main_id = m.id
 
-            WHERE ${where.join('\nAND ')}
+            WHERE
+                ${conditions.join(' OR ')}
 
             ORDER BY
-
                 m.advisory_date DESC,
-
+                d.state_lg_code ASC,
+                d.district_lg_code ASC,
+                d.block_lg_code ASC,
                 d.advisory_detail_id ASC,
-
                 d.language_id DESC
-
             `,
-
-            params
-
+            queryParams
         );
 
-
-        // -------------------------------------------------
-        // Group English + Hindi rows
-        //
-        // One advisory_detail_id
-        // becomes one advisory block.
-        // -------------------------------------------------
+        // ------------------------------------------
+        // Group English + Hindi
+        // ------------------------------------------
 
         const advisoryMap = new Map();
 
-
         rows.forEach(row => {
-
-            if (
-
-                !advisoryMap.has(
-                    row.advisory_detail_id
-                )
-
-            ) {
-
+            if (!advisoryMap.has(row.advisory_detail_id)) {
                 advisoryMap.set(
-
                     row.advisory_detail_id,
-
                     {
-
                         advisory_detail_id:
                             row.advisory_detail_id,
 
@@ -809,7 +617,10 @@ export const loadPreviousAdvisories = async (req, res) => {
 
                         crop_id:
                             row.crop_id,
-                        crop_stage_id: row.crop_stage_id,
+
+                        crop_stage_id:
+                            row.crop_stage_id,
+
                         imd_advisory_type_id:
                             row.imd_advisory_type_id,
 
@@ -817,79 +628,46 @@ export const loadPreviousAdvisories = async (req, res) => {
                             row.advisory_date,
 
                         advisory_en: '',
-
                         advisory_hi: ''
-
                     }
+                );
+            }
 
+            const advisory =
+                advisoryMap.get(
+                    row.advisory_detail_id
                 );
 
-            }
-
-
-            const advisory = advisoryMap.get(
-                row.advisory_detail_id
-            );
-
-
-            // English
-
             if (row.language_id === 2) {
-
                 advisory.advisory_en =
                     row.advisory;
-
             }
-
-
-            // Hindi
 
             if (row.language_id === 1) {
-
                 advisory.advisory_hi =
                     row.advisory;
-
             }
-
         });
 
-
-        // -------------------------------------------------
-        // Response
-        // -------------------------------------------------
-
         return res.status(200).json({
-
             success: true,
-
             data: Array.from(
                 advisoryMap.values()
             )
-
         });
 
     } catch (error) {
-
         console.error(
-
             'Error loading previous advisories:',
-
             error
-
         );
 
-
         return res.status(500).json({
-
             success: false,
-
             message:
                 'Failed to load previous advisories.'
-
         });
-
     }
-
 };
 
 export const createBulkAdvisories = async (req, res) => {
