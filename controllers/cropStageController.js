@@ -7,6 +7,11 @@ import {
     hasPendingApproval,
     createApprovalRequest
 } from "../services/approvalService.js";
+import {
+    executeCreateCropStage,
+    executeUpdateCropStage,
+    executeDeactivateCropStage
+} from "../services/cropStageService.js";
 
 export const getCropStagesPaginated = async (req, res) => {
     try {
@@ -320,31 +325,10 @@ export const createCropStage = async (req, res) => {
         }
 
 
-        const [result] =
-            await connection.query(
-                `
-                INSERT INTO crop_stages
-                (
-                    stage_name,
-                    stage_name_h,
-                    stage_code,
-                    description,
-                    is_active
-                )
-
-                VALUES (?, ?, ?, ?, ?)
-                `,
-                [
-                    stageData.stage_name,
-                    stageData.stage_name_h,
-                    stageData.stage_code,
-                    stageData.description,
-                    stageData.is_active
-                ]
-            );
-
-
-        const stageId = result.insertId;
+        const stageId = await executeCreateCropStage(
+            connection,
+            stageData
+        );
 
 
         await connection.commit();
@@ -588,27 +572,9 @@ export const updateCropStage = async (req, res) => {
         }
 
 
-        await connection.query(
-            `
-            UPDATE crop_stages
-
-            SET
-                stage_name = ?,
-                stage_name_h = ?,
-                stage_code = ?,
-                description = ?,
-                is_active = ?
-
-            WHERE id = ?
-            `,
-            [
-                stageData.stage_name,
-                stageData.stage_name_h,
-                stageData.stage_code,
-                stageData.description,
-                stageData.is_active,
-                stageData.id
-            ]
+        await executeUpdateCropStage(
+            connection,
+            stageData
         );
 
 
@@ -772,15 +738,9 @@ export const deleteCropStage = async (req, res) => {
 
         }
 
-        await connection.query(
-            `
-            UPDATE crop_stages
-
-            SET is_active = 0
-
-            WHERE id = ?
-            `,
-            [stage.id]
+        await executeDeactivateCropStage(
+            connection,
+            stage.id
         );
 
         await connection.commit();

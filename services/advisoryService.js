@@ -297,6 +297,7 @@ export const executeCreateBulkAdvisories = async (
 
                     cat_id,
                     crop_id,
+                    crop_stage_id,
                     advisory_type_id,
 
                     advisory,
@@ -305,7 +306,7 @@ export const executeCreateBulkAdvisories = async (
                 VALUES (
                     ?, ?,
                     ?, ?, ?,
-                    ?, ?, ?,
+                    ?, ?, ?, ?,
                     ?, ?
                 )
                 `,
@@ -321,6 +322,7 @@ export const executeCreateBulkAdvisories = async (
 
                     advisory.imd_category_id,
                     advisory.crop_id,
+                    advisory.crop_stage_id ?? null,
                     advisory.imd_advisory_type_id,
 
                     advisory.advisory_en,
@@ -367,6 +369,7 @@ export const executeCreateBulkAdvisories = async (
 
                     cat_id,
                     crop_id,
+                    crop_stage_id,
                     advisory_type_id,
 
                     advisory,
@@ -375,7 +378,7 @@ export const executeCreateBulkAdvisories = async (
                 VALUES (
                     ?, ?,
                     ?, ?, ?,
-                    ?, ?, ?,
+                    ?, ?, ?, ?,
                     ?, ?
                 )
                 `,
@@ -391,6 +394,7 @@ export const executeCreateBulkAdvisories = async (
 
                     advisory.imd_category_id,
                     advisory.crop_id,
+                    advisory.crop_stage_id ?? null,
                     advisory.imd_advisory_type_id,
 
                     advisory.advisory_hi,

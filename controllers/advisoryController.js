@@ -734,26 +734,16 @@ export const loadPreviousAdvisories = async (req, res) => {
             SELECT
 
                 d.advisory_detail_id,
-
                 d.state_lg_code,
-
                 d.district_lg_code,
-
                 d.block_lg_code,
-
                 d.cat_id AS imd_category_id,
-
                 d.crop_id,
-
-                d.advisory_type_id
-                    AS imd_advisory_type_id,
-
+                d.crop_stage_id,
+                d.advisory_type_id AS imd_advisory_type_id,
                 d.advisory,
-
                 d.language_id,
-
                 m.advisory_date
-
             FROM imd_advisory_detail d
 
             JOIN imd_advisory_main m
@@ -819,7 +809,7 @@ export const loadPreviousAdvisories = async (req, res) => {
 
                         crop_id:
                             row.crop_id,
-
+                        crop_stage_id: row.crop_stage_id,
                         imd_advisory_type_id:
                             row.imd_advisory_type_id,
 
@@ -931,6 +921,7 @@ export const createBulkAdvisories = async (req, res) => {
                 imd_category_id,
                 crop_id,
                 // language_id,
+                crop_stage_id,
                 advisory_en,
                 advisory_hi,
                 advisory_date
@@ -1031,6 +1022,14 @@ export const createBulkAdvisories = async (req, res) => {
                         message: "Selected crop does not belong to the selected category."
                     });
 
+                }
+
+                if (crop_stage_id != null && crop_id == null) {
+                    await connection.rollback();
+                    return res.status(400).json({
+                        success: false,
+                        message: "Crop stage cannot be selected without a crop."
+                    });
                 }
 
             }
@@ -1871,14 +1870,16 @@ export const submitAdvisoryWizard = async (req, res) => {
             await connection.execute(
                 `INSERT INTO weather_forecast_summary (
           advisory_main_id,
+           forecast_issue_date,
           state_lg_code,
           district_lg_code,
           block_lg_code,
           summary_en,
           summary_hi
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
                 [
                     advisory_main_id,
+                    advisory_date,
                     forecast_summary.state_lg_code ?? state_lg_code,
                     forecast_summary.district_lg_code ?? district_lg_code,
                     forecast_summary.block_lg_code ?? block_lg_code ?? null,
@@ -1898,17 +1899,19 @@ export const submitAdvisoryWizard = async (req, res) => {
             advisory_detail_id,
             cat_id,
             crop_id,
+            crop_stage_id,
             advisory_type_id,
             advisory,
             language_Id,
             block_lg_code,
             district_lg_code,
             state_lg_code
-          ) VALUES (?, NULL, ?, ?, ?, ?, 2, ?, ?, ?)`,
+          ) VALUES (?, NULL, ?, ?, ?, ?, ?, 2, ?, ?, ?)`,
                     [
                         advisory_main_id,
                         advisory.imd_category_id,
                         advisory.crop_id ?? null,
+                        advisory.crop_stage_id ?? null,
                         advisory.imd_advisory_type_id,
                         advisory.advisory_en ?? null,
                         advisory.block_lg_code ?? block_lg_code ?? null,
@@ -1934,18 +1937,20 @@ export const submitAdvisoryWizard = async (req, res) => {
             advisory_detail_id,
             cat_id,
             crop_id,
+            crop_stage_id,
             advisory_type_id,
             advisory,
             language_Id,
             block_lg_code,
             district_lg_code,
             state_lg_code
-          ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
                     [
                         advisory_main_id,
                         english_advisory_id,
                         advisory.imd_category_id,
                         advisory.crop_id ?? null,
+                        advisory.crop_stage_id ?? null,
                         advisory.imd_advisory_type_id,
                         advisory.advisory_hi ?? null,
                         advisory.block_lg_code ?? block_lg_code ?? null,

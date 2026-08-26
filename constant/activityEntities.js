@@ -10,6 +10,7 @@ export const ENTITIES = Object.freeze({
 
     CROP: "CROP",
     CROP_STAGE: "CROP-STAGES",
+    CROP_RANGE: "CROP-STAGES",
     CATEGORY: "CATEGORY",
 
     ADVISORY: "ADVISORY",

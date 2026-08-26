@@ -13,6 +13,12 @@ import { executeCreateZone, executeDeleteZone, executeUpdateZone } from "../serv
 import { executeCreateState, executeDeleteState, executeUpdateState } from "../services/stateService.js";
 import { executeCreateDistrict, executeDeleteDistrict, executeUpdateDistrict } from "../services/districtService.js";
 import { executeCreateBlock, executeDeleteBlock, executeUpdateBlock } from "../services/blockService.js";
+import {
+    executeCreateCropRange,
+    executeUpdateCropRange,
+    executeDeactivateCropRange
+} from "../services/cropRangeService.js";
+import { executeCreateCropStage, executeDeactivateCropStage, executeUpdateCropStage } from "../services/cropStageService.js";
 
 export const getApprovalRequests = async (req, res) => {
     try {
@@ -269,6 +275,60 @@ export const approveRequest = async (req, res) => {
             case `${ENTITIES.CROP}:${ACTIONS.DELETE}`:
 
                 entityId = await executeDeleteCrop(
+                    connection,
+                    payload.id
+                );
+
+                break;
+
+            case `${ENTITIES.CROP_STAGE}:${ACTIONS.CREATE}`:
+
+                entityId = await executeCreateCropStage(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.CROP_STAGE}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateCropStage(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.CROP_STAGE}:${ACTIONS.DELETE}`:
+
+                entityId = await executeDeactivateCropStage(
+                    connection,
+                    payload.id
+                );
+
+                break;
+
+            case `${ENTITIES.CROP_RANGE}:${ACTIONS.CREATE}`:
+
+                entityId = await executeCreateCropRange(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.CROP_RANGE}:${ACTIONS.UPDATE}`:
+
+                entityId = await executeUpdateCropRange(
+                    connection,
+                    payload
+                );
+
+                break;
+
+            case `${ENTITIES.CROP_RANGE}:${ACTIONS.DELETE}`:
+
+                entityId = await executeDeactivateCropRange(
                     connection,
                     payload.id
                 );
