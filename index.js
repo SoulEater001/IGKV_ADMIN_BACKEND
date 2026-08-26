@@ -19,6 +19,7 @@ import advisoryRoutes from './routes/advisoryRoutes.js';
 import advisoryTypeRoutes from './routes/advisoryTypeRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import cropRoutes from './routes/cropRoutes.js';
+import cropStageRoutes from './routes/cropStageRoutes.js';
 import adminUsersRoutes from './routes/adminUsersRoutes.js';
 import rolesRoutes from './routes/rolesRoutes.js';
 import permissionRoutes from './routes/permissionRoutes.js';
@@ -64,6 +65,7 @@ app.use("/api/advisories", advisoryRoutes);
 app.use("/api/advisories/types", advisoryTypeRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/crops", cropRoutes);
+app.use("/api/crop-stages", cropStageRoutes);
 app.use("/api/users", adminUsersRoutes);
 app.use("/api/roles", rolesRoutes);
 app.use("/api/permissions", permissionRoutes);
@@ -86,7 +88,7 @@ async function startServer() {
         conn.release();
 
         initWS(server);
-        initMQTT();
+        // initMQTT();
         startDeviceSnapshotWorker();
 
         server.listen(PORT, () => {

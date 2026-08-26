@@ -235,86 +235,6 @@ export const bulkUpsertForecasts = async (req, res) => {
     }
 };
 
-export const getExistingForecastOptions = async (req, res) => {
-    try {
-        const stationId = Number(req.query.station_id);
-        const issueDate = req.query.issue_date;
-
-        // Validate station
-        if (!Number.isInteger(stationId) || stationId <= 0
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid station_id",
-            });
-        }
-
-        // Validate issue date
-        if (!isValidIsoDate(issueDate)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid issue_date",
-            });
-        }
-
-        const selectedDate = new Date(
-            `${issueDate}T00:00:00`
-        );
-
-        const selectedYear = selectedDate.getFullYear();
-        const selectedMonth =
-            selectedDate.getMonth() + 1;
-
-        // Example:
-        // Selected: July 2026
-        // Search: July 2025
-        const previousYear = selectedYear - 1;
-
-        const [rows] = await pool.query(
-            `
-            SELECT DISTINCT
-                DATE_FORMAT(
-                    forecast_date,
-                    '%Y-%m-%d'
-                ) AS forecast_date,
-                 DATE_FORMAT(
-                    forecast_issue_date,
-                    '%Y-%m-%d'
-                ) AS issue_date
-            FROM weather_forecast
-            WHERE station_id = ?
-              AND MONTH(forecast_date) = ?
-              AND YEAR(forecast_date) = ?
-            ORDER BY forecast_date ASC
-            `,
-            [
-                stationId,
-                selectedMonth,
-                previousYear,
-            ]
-        );
-
-        return res.status(200).json({
-            success: true,
-            data: rows.map(row => ({
-                issue_date: row.issue_date,
-                forecast_date: row.forecast_date,
-            })),
-        });
-
-    } catch (error) {
-        console.error(
-            "Failed to fetch existing forecast options:",
-            error
-        );
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch existing forecast options",
-        });
-    }
-};
-
 export const getForecasts = async (req, res) => {
     try {
         const stationId = Number(req.query.station_id);
@@ -410,132 +330,131 @@ export const getForecasts = async (req, res) => {
     }
 };
 
-export const getForecastsWithOptions = async (req, res) => {
+export const getExistingForecastOptions = async (req, res) => {
     try {
         const stationId = Number(req.query.station_id);
-        const rawSelections = req.query.selections;
-        let selections;
-        try {
-            selections = JSON.parse(rawSelections ?? '[]');
-        } catch {
+        const issueDate = req.query.issue_date;
+
+        if (!Number.isInteger(stationId) || stationId <= 0) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid selections format',
+                message: "Invalid station_id",
             });
         }
 
-        if (
-            !Number.isInteger(stationId) ||
-            stationId <= 0
-        ) {
+        if (!isValidIsoDate(issueDate)) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid station_id',
+                message: "Invalid issue_date",
             });
         }
 
-        if (
-            !Array.isArray(selections) ||
-            !selections.length
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid forecast selections',
-            });
-        }
+        const [selectedYear, selectedMonth] =
+            issueDate.split("-").map(Number);
 
-        for (const selection of selections) {
-            if (
-                !isValidIsoDate(selection.issueDate) ||
-                !isValidIsoDate(selection.forecastDate)
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Invalid forecast selection',
-                });
-            }
-        }
-
-        const conditions = selections
-            .map(() => `
-        (
-          forecast_issue_date = ?
-          AND forecast_date = ?
-        )
-      `)
-            .join(' OR ');
-
-        const values = selections.flatMap(selection => [
-            selection.issueDate,
-            selection.forecastDate,
-        ]);
+        const years = [
+            selectedYear,
+            selectedYear - 1,
+        ];
 
         const [rows] = await pool.query(
             `
-      SELECT
-        DATE_FORMAT(
-          forecast_issue_date,
-          '%Y-%m-%d'
-        ) AS issue_date,
+            SELECT
+                YEAR(wf.forecast_date) AS year,
 
-        DATE_FORMAT(
-          forecast_date,
-          '%Y-%m-%d'
-        ) AS forecast_date,
+                MONTH(wf.forecast_date) AS month,
 
-        rainfall,
-        max_temperature,
-        min_temperature,
-        cloud_amount,
-        relative_humidity_1,
-        relative_humidity_2,
-        wind_speed,
-        wind_direction
+                DATE_FORMAT(
+                    wf.forecast_issue_date,
+                    '%Y-%m-%d'
+                ) AS forecast_issue_date,
 
-      FROM weather_forecast
+                wf.state_lg_code,
+                wf.district_lg_code,
+                wf.block_lg_code,
 
-      WHERE station_id = ?
-        AND (
-          ${conditions}
-        )
+                DATE_FORMAT(
+                    MIN(wf.forecast_date),
+                    '%Y-%m-%d'
+                ) AS start_date,
 
-      ORDER BY
-        forecast_issue_date DESC,
-        forecast_date ASC
-      `,
+                DATE_FORMAT(
+                    MAX(wf.forecast_date),
+                    '%Y-%m-%d'
+                ) AS end_date,
+
+                COUNT(*) AS total_days,
+
+                CASE
+                    WHEN wfs.id IS NOT NULL THEN true
+                    ELSE false
+                END AS summary_exists
+
+            FROM weather_forecast wf
+
+            LEFT JOIN weather_forecast_summary wfs
+                ON wfs.forecast_issue_date =
+                    wf.forecast_issue_date
+                AND wfs.state_lg_code =
+                    wf.state_lg_code
+                AND wfs.district_lg_code =
+                    wf.district_lg_code
+                AND wfs.block_lg_code =
+                    wf.block_lg_code
+
+            WHERE wf.station_id = ?
+              AND MONTH(wf.forecast_date) = ?
+              AND YEAR(wf.forecast_date) IN (?)
+
+            GROUP BY
+                YEAR(wf.forecast_date),
+                MONTH(wf.forecast_date),
+                wf.forecast_issue_date,
+                wf.state_lg_code,
+                wf.district_lg_code,
+                wf.block_lg_code,
+                wfs.id
+
+            ORDER BY
+                YEAR(wf.forecast_date) DESC,
+                wf.forecast_issue_date DESC
+            `,
             [
                 stationId,
-                ...values,
+                selectedMonth,
+                years,
             ]
         );
 
         const data = rows.map(row => ({
-            key: row.forecast_date,
+            year: Number(row.year),
+            month: Number(row.month),
 
-            cells: {
-                rainfall: formatWeatherValue(row.rainfall),
-                max_temperature: formatWeatherValue(
-                    row.max_temperature
-                ),
-                min_temperature: formatWeatherValue(
-                    row.min_temperature
-                ),
-                cloud_amount: formatWeatherValue(
-                    row.cloud_amount
-                ),
-                relative_humidity_1: formatWeatherValue(
-                    row.relative_humidity_1
-                ),
-                relative_humidity_2: formatWeatherValue(
-                    row.relative_humidity_2
-                ),
-                wind_speed: formatWeatherValue(
-                    row.wind_speed
-                ),
-                wind_direction:
-                    row.wind_direction ?? '',
-            },
+            forecast_issue_date: row.forecast_issue_date,
+
+            state_lg_code:
+                row.state_lg_code !== null
+                    ? Number(row.state_lg_code)
+                    : null,
+
+            district_lg_code:
+                row.district_lg_code !== null
+                    ? Number(row.district_lg_code)
+                    : null,
+
+            block_lg_code:
+                row.block_lg_code !== null
+                    ? Number(row.block_lg_code)
+                    : null,
+
+            start_date: row.start_date,
+            end_date: row.end_date,
+
+            total_days: Number(row.total_days),
+
+            summary_exists: Boolean(row.summary_exists),
         }));
+        console.log("forecast option : ", data)
 
         return res.status(200).json({
             success: true,
@@ -544,14 +463,371 @@ export const getForecastsWithOptions = async (req, res) => {
 
     } catch (error) {
         console.error(
-            'Failed to fetch weather forecasts:',
+            "Failed to fetch existing forecast options:",
             error
         );
 
         return res.status(500).json({
             success: false,
             message:
-                'Failed to fetch weather forecasts',
+                "Failed to fetch existing forecast options",
+        });
+    }
+};
+
+export const getForecastsWithOptions = async (req, res) => {
+    try {
+        const stationId = Number(req.query.station_id);
+
+        if (!Number.isInteger(stationId) || stationId <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid station_id",
+            });
+        }
+
+        let forecastOptions = [];
+
+        try {
+            forecastOptions = req.query.forecastOptions
+                ? JSON.parse(req.query.forecastOptions)
+                : [];
+        } catch {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid forecastOptions",
+            });
+        }
+
+        if (
+            !Array.isArray(forecastOptions) ||
+            forecastOptions.length === 0
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "At least one forecast option is required",
+            });
+        }
+
+        // ------------------------------------------
+        // Validate forecast options
+        // ------------------------------------------
+
+        for (const option of forecastOptions) {
+            if (!isValidIsoDate(option.issueDate)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid forecast issue date",
+                });
+            }
+
+            // State and district are required.
+            // Block can be NULL.
+            if (
+                option.stateLgCode == null ||
+                option.districtLgCode == null
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "State and district LG codes are required",
+                });
+            }
+        }
+
+        // ------------------------------------------
+        // Build forecast scope conditions
+        // ------------------------------------------
+
+        const conditions = [];
+        const queryParams = [stationId];
+
+        for (const option of forecastOptions) {
+            let condition = `
+                (
+                    forecast_issue_date = ?
+                    AND state_lg_code = ?
+                    AND district_lg_code = ?
+            `;
+
+            queryParams.push(
+                option.issueDate,
+                option.stateLgCode,
+                option.districtLgCode
+            );
+
+            if (option.blockLgCode == null) {
+                condition += `
+                    AND block_lg_code IS NULL
+                `;
+            } else {
+                condition += `
+                    AND block_lg_code = ?
+                `;
+
+                queryParams.push(option.blockLgCode);
+            }
+
+            condition += `
+                )
+            `;
+
+            conditions.push(condition);
+        }
+
+        // ------------------------------------------
+        // Fetch forecasts
+        // ------------------------------------------
+
+        const [rows] = await pool.query(
+            `
+            SELECT
+                DATE_FORMAT(
+                    forecast_issue_date,
+                    '%Y-%m-%d'
+                ) AS forecast_issue_date,
+
+                DATE_FORMAT(
+                    forecast_date,
+                    '%Y-%m-%d'
+                ) AS forecast_date,
+
+                state_lg_code,
+                district_lg_code,
+                block_lg_code,
+
+                rainfall,
+                max_temperature,
+                min_temperature,
+                cloud_amount,
+                relative_humidity_1,
+                relative_humidity_2,
+                wind_speed,
+                wind_direction
+
+            FROM weather_forecast
+
+            WHERE station_id = ?
+              AND (
+                ${conditions.join(" OR ")}
+              )
+
+            ORDER BY
+                forecast_issue_date ASC,
+                forecast_date ASC
+            `,
+            queryParams
+        );
+
+        const summaryConditions = [];
+        const summaryParams = [];
+
+        for (const option of forecastOptions) {
+            let condition = `
+        (
+            forecast_issue_date = ?
+            AND state_lg_code = ?
+            AND district_lg_code = ?
+    `;
+
+            summaryParams.push(
+                option.issueDate,
+                option.stateLgCode,
+                option.districtLgCode
+            );
+
+            if (option.blockLgCode == null) {
+                condition += `
+            AND block_lg_code IS NULL
+        `;
+            } else {
+                condition += `
+            AND block_lg_code = ?
+        `;
+
+                summaryParams.push(option.blockLgCode);
+            }
+
+            condition += `)`;
+
+            summaryConditions.push(condition);
+        }
+
+        const [summaryRows] = await pool.query(
+            `
+    SELECT
+        DATE_FORMAT(
+            forecast_issue_date,
+            '%Y-%m-%d'
+        ) AS forecast_issue_date,
+
+        state_lg_code,
+        district_lg_code,
+        block_lg_code,
+
+        summary_en,
+        summary_hi
+
+    FROM weather_forecast_summary
+
+    WHERE
+        ${summaryConditions.join(" OR ")}
+    `,
+            summaryParams
+        );
+
+
+        // ------------------------------------------
+        // Format response
+        // ------------------------------------------
+
+        const summaries = summaryRows.map(row => ({
+            forecast_issue_date: row.forecast_issue_date,
+            state_lg_code:
+                row.state_lg_code !== null
+                    ? Number(row.state_lg_code)
+                    : null,
+
+            district_lg_code:
+                row.district_lg_code !== null
+                    ? Number(row.district_lg_code)
+                    : null,
+
+            block_lg_code:
+                row.block_lg_code !== null
+                    ? Number(row.block_lg_code)
+                    : null,
+            summary_en: row.summary_en,
+            summary_hi: row.summary_hi,
+
+        }));
+
+        const data = rows.map(row => ({
+            forecast_issue_date:
+                row.forecast_issue_date,
+
+            state_lg_code:
+                row.state_lg_code !== null
+                    ? Number(row.state_lg_code)
+                    : null,
+
+            district_lg_code:
+                row.district_lg_code !== null
+                    ? Number(row.district_lg_code)
+                    : null,
+
+            block_lg_code:
+                row.block_lg_code !== null
+                    ? Number(row.block_lg_code)
+                    : null,
+
+            key: row.forecast_date,
+
+            cells: {
+                rainfall:
+                    formatWeatherValue(row.rainfall),
+
+                max_temperature:
+                    formatWeatherValue(row.max_temperature),
+
+                min_temperature:
+                    formatWeatherValue(row.min_temperature),
+
+                cloud_amount:
+                    formatWeatherValue(row.cloud_amount),
+
+                relative_humidity_1:
+                    formatWeatherValue(row.relative_humidity_1),
+
+                relative_humidity_2:
+                    formatWeatherValue(row.relative_humidity_2),
+
+                wind_speed:
+                    formatWeatherValue(row.wind_speed),
+
+                wind_direction: row.wind_direction ?? '',
+            },
+        }));
+
+        // console.log("previous forecast data :",data, summaries)
+
+        return res.status(200).json({
+            success: true,
+            data,
+            summaries
+        });
+
+    } catch (error) {
+        console.error(
+            "Failed to fetch weather forecasts:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Failed to fetch weather forecasts",
+        });
+    }
+};
+
+export const upsertWeatherForecastSummary = async (req, res) => {
+    try {
+        const {
+            advisoryMainId,
+            state_lg_code,
+            district_lg_code,
+            block_lg_code,
+            summary_en,
+            summary_hi,
+        } = req.body;
+
+        if (!advisoryMainId || !state_lg_code) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "advisoryMainId and state_lg_code are required",
+            });
+        }
+
+        const query = `
+      INSERT INTO weather_forecast_summary (
+        advisory_main_id,
+        state_lg_code,
+        district_lg_code,
+        block_lg_code,
+        summary_en,
+        summary_hi
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        summary_en = VALUES(summary_en),
+        summary_hi = VALUES(summary_hi)
+    `;
+
+        await pool.query(query, [
+            advisoryMainId,
+            state_lg_code,
+            district_lg_code ?? null,
+            block_lg_code ?? null,
+            summary_en ?? null,
+            summary_hi ?? null,
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            message: "Weather forecast summary saved successfully",
+        });
+
+    } catch (error) {
+        console.error(
+            "Error saving weather forecast summary:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to save weather forecast summary",
         });
     }
 };

@@ -175,29 +175,20 @@ export const getExistingObservationOptions = async (req, res) => {
         const year = Number(req.query.year);
         const month = Number(req.query.month);
 
-        // Validate station
-        if (
-            !Number.isInteger(stationId) ||
-            stationId <= 0
-        ) {
+        if (!Number.isInteger(stationId) || stationId <= 0) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid stationId",
             });
         }
 
-        // Validate year
-        if (
-            !Number.isInteger(year) ||
-            year <= 0
-        ) {
+        if (!Number.isInteger(year) || year <= 0) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid year",
             });
         }
 
-        // Validate month
         if (
             !Number.isInteger(month) ||
             month < 1 ||
@@ -209,45 +200,99 @@ export const getExistingObservationOptions = async (req, res) => {
             });
         }
 
-        const previousYears = [
+        const years = [
+            year,
             year - 1,
             year - 2,
         ];
 
         const [rows] = await pool.query(
             `
-            SELECT DISTINCT
-                YEAR(observation_date) AS year
-            FROM weather_observation
-            WHERE station_id = ?
-              AND MONTH(observation_date) = ?
-              AND YEAR(observation_date) IN (?)
-            ORDER BY YEAR(observation_date) DESC
+            SELECT
+                YEAR(wo.observation_date) AS year,
+
+                MONTH(wo.observation_date) AS month,
+
+                DATE_FORMAT(
+                    wo.observation_issue_date,
+                    '%Y-%m-%d'
+                ) AS observation_issue_date,
+
+                DATE_FORMAT(
+                    MIN(wo.observation_date),
+                    '%Y-%m-%d'
+                ) AS start_date,
+
+                DATE_FORMAT(
+                    MAX(wo.observation_date),
+                    '%Y-%m-%d'
+                ) AS end_date,
+
+                COUNT(*) AS total_days,
+
+                CASE
+                    WHEN wos.id IS NOT NULL THEN true
+                    ELSE false
+                END AS summary_exists
+
+            FROM weather_observation wo
+
+            LEFT JOIN weather_observation_summary wos
+                ON wos.station_id = wo.station_id
+                AND wos.observation_issue_date =
+                    wo.observation_issue_date
+
+            WHERE wo.station_id = ?
+              AND MONTH(wo.observation_date) = ?
+              AND YEAR(wo.observation_date) IN (?)
+
+            GROUP BY
+                YEAR(wo.observation_date),
+                MONTH(wo.observation_date),
+                wo.observation_issue_date,
+                wos.id
+
+            ORDER BY
+                YEAR(wo.observation_date) DESC,
+                wo.observation_issue_date DESC
             `,
             [
                 stationId,
                 month,
-                previousYears,
+                years,
             ]
         );
 
+        const data = rows.map(row => ({
+            year: Number(row.year),
+            month: Number(row.month),
+
+            observation_issue_date:
+                row.observation_issue_date,
+
+            start_date: row.start_date,
+            end_date: row.end_date,
+
+            total_days: Number(row.total_days),
+
+            summary_exists:
+                Boolean(row.summary_exists),
+        }));
+
+        // console.log("options data :", data)
+
         return res.status(200).json({
             success: true,
-            data: rows.map(row => ({
-                month,
-                year: Number(row.year),
-            })),
+            data,
         });
 
     } catch (error) {
-        console.error(
-            "Failed to fetch existing observation options:",
-            error
-        );
+        console.error("Failed to fetch existing observation options:", error);
 
         return res.status(500).json({
             success: false,
-            message: "Failed to fetch existing observation options",
+            message:
+                "Failed to fetch existing observation options",
         });
     }
 };
@@ -255,8 +300,14 @@ export const getExistingObservationOptions = async (req, res) => {
 export const getObservations = async (req, res) => {
     try {
         const stationId = Number(req.query.stationId);
-        const year = Number(req.query.year);
-        const month = Number(req.query.month);
+
+        const observationIssueDates =
+            req.query.observationIssueDates
+                ? req.query.observationIssueDates
+                    .split(",")
+                    .map(date => date.trim())
+                    .filter(Boolean)
+                : [];
 
         // Validate stationId
         if (!Number.isInteger(stationId) || stationId <= 0) {
@@ -266,29 +317,29 @@ export const getObservations = async (req, res) => {
             });
         }
 
-        // Validate year
-        if (!Number.isInteger(year) || year <= 0) {
+        // Validate observation issue dates
+        if (observationIssueDates.length === 0) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid year",
+                message:
+                    "At least one observation issue date is required",
             });
         }
 
-        // Validate month
-        if (!Number.isInteger(month) || month < 1 || month > 12) {
-            return res.status(400).json({
-                success: false,
-                message: "Month must be between 1 and 12",
-            });
-        }
-
-        const [rows] = await pool.query(
+        // Get observation data
+        const [observationRows] = await pool.query(
             `
             SELECT
+                DATE_FORMAT(
+                    observation_issue_date,
+                    '%Y-%m-%d'
+                ) AS observation_issue_date,
+
                 DATE_FORMAT(
                     observation_date,
                     '%Y-%m-%d'
                 ) AS observation_date,
+
                 max_temperature,
                 min_temperature,
                 rainfall,
@@ -299,20 +350,50 @@ export const getObservations = async (req, res) => {
                 wind_speed,
                 evaporation,
                 sunshine_hours
+
             FROM weather_observation
+
             WHERE station_id = ?
-              AND YEAR(observation_date) = ?
-              AND MONTH(observation_date) = ?
-            ORDER BY observation_date ASC
+              AND observation_issue_date IN (?)
+
+            ORDER BY
+                observation_issue_date ASC,
+                observation_date ASC
             `,
             [
                 stationId,
-                year,
-                month,
+                observationIssueDates,
             ]
         );
 
-        const data = rows.map(row => ({
+        // Get summary content
+        const [summaryRows] = await pool.query(
+            `
+            SELECT
+                DATE_FORMAT(
+                    observation_issue_date,
+                    '%Y-%m-%d'
+                ) AS observation_issue_date,
+
+                summary_en,
+                summary_hi
+
+            FROM weather_observation_summary
+
+            WHERE station_id = ?
+              AND observation_issue_date IN (?)
+            `,
+            [
+                stationId,
+                observationIssueDates,
+            ]
+        );
+
+        // Format observation rows
+        const observations = observationRows.map(row => ({
+            observation_issue_date:
+                row.observation_issue_date,
+
             key: row.observation_date,
 
             cells: {
@@ -329,20 +410,190 @@ export const getObservations = async (req, res) => {
             },
         }));
 
+        // Format summaries
+        const summaries = summaryRows.map(row => ({
+            observation_issue_date: row.observation_issue_date,
+            summary_en: row.summary_en,
+            summary_hi: row.summary_hi,
+        }));
+        // console.log("Data", observations, summaries)
+
         return res.status(200).json({
             success: true,
-            data,
+
+            data: {
+                observations,
+                summaries,
+            },
+        });
+
+
+    } catch (error) {
+        console.error("Failed to fetch weather observations:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch weather observations",
+        });
+    }
+};
+
+export const upsertWeatherObservationSummary = async (req, res) => {
+    try {
+        const {
+            stationId,
+            observationIssueDate,
+            summary_en,
+            summary_hi,
+            reuse_existing,
+        } = req.body;
+
+        if (!stationId || !observationIssueDate) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "stationId and observationIssueDate are required",
+            });
+        }
+
+        // If existing summary is being reused,
+        // do not insert or update anything
+        if (reuse_existing === true) {
+            return res.status(200).json({
+                success: true,
+                message: "Existing weather observation summary reused",
+            });
+        }
+
+        const query = `
+            INSERT INTO weather_observation_summary (
+                station_id,
+                observation_issue_date,
+                summary_en,
+                summary_hi
+            )
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                summary_en = VALUES(summary_en),
+                summary_hi = VALUES(summary_hi)
+        `;
+
+        await pool.query(query, [
+            stationId,
+            observationIssueDate,
+            summary_en || null,
+            summary_hi || null,
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            message: "Weather observation summary saved successfully",
         });
 
     } catch (error) {
         console.error(
-            "Failed to fetch weather observations:",
+            "Error saving weather observation summary:",
             error
         );
 
         return res.status(500).json({
             success: false,
-            message: "Failed to fetch weather observations",
+            message: "Failed to save weather observation summary",
+        });
+    }
+};
+
+export const checkObservationAvailability = async (req, res) => {
+    try {
+        const {
+            station_id,
+            observation_issue_date,
+        } = req.query;
+
+        if (!station_id || !observation_issue_date) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "station_id and observation_issue_date are required.",
+            });
+        }
+
+        const stationId = Number(station_id);
+
+        if (
+            !Number.isInteger(stationId) ||
+            stationId <= 0
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "station_id must be a valid positive integer.",
+            });
+        }
+
+        const [
+            [observationRows],
+            [summaryRows],
+        ] = await Promise.all([
+            pool.query(
+                `
+                SELECT COUNT(*) AS row_count
+                FROM weather_observation
+                WHERE station_id = ?
+                  AND observation_issue_date = ?
+                `,
+                [
+                    stationId,
+                    observation_issue_date,
+                ]
+            ),
+
+            pool.query(
+                `
+                SELECT id
+                FROM weather_observation_summary
+                WHERE station_id = ?
+                  AND observation_issue_date = ?
+                LIMIT 1
+                `,
+                [
+                    stationId,
+                    observation_issue_date,
+                ]
+            ),
+        ]);
+
+        const rowCount = Number(
+            observationRows[0].row_count
+        );
+
+        const summaryAvailable =
+            summaryRows.length > 0;
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                observations: {
+                    available: rowCount > 0,
+                    row_count: rowCount,
+                },
+
+                summary: {
+                    available: summaryAvailable,
+                },
+            },
+        });
+
+    } catch (error) {
+        console.error(
+            "Observation availability error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Failed to check observation availability.",
         });
     }
 };

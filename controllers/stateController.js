@@ -8,12 +8,23 @@ import { executeCreateState, executeDeleteState, executeUpdateState } from "../s
 
 export const getState = async (req, res) => {
     try {
-        const [rows] = await pool.query(`
-           SELECT
+        const { stateLgCode } = req.query;
+
+        let where = `WHERE s.deleted IS NULL`;
+        const params = [];
+
+        if (stateLgCode) {
+            where += ` AND s.state_lg_code = ?`;
+            params.push(stateLgCode);
+        }
+
+        const [rows] = await pool.query(
+            `
+            SELECT
                 s.state_id,
                 s.state_lg_code,
                 s.create_datetime,
-                s.name As name,
+                s.name AS name,
 
                 en.name AS name_en,
                 hi.name AS name_hi
@@ -30,17 +41,19 @@ export const getState = async (req, res) => {
                AND hi.language_id = 1
                AND hi.deleted IS NULL
 
-            WHERE s.deleted IS NULL
+            ${where}
 
             ORDER BY en.name ASC
-
-        `);
+            `,
+            params
+        );
 
         return res.status(200).json({
             success: true,
             data: rows,
             count: rows.length
         });
+
     } catch (error) {
         console.error("Error fetching states:", error);
 
@@ -525,7 +538,7 @@ export const updateState = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: error.message||"Failed to update state."
+            message: error.message || "Failed to update state."
         });
 
     } finally {

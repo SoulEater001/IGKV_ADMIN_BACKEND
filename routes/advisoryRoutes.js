@@ -1,5 +1,5 @@
 import express from 'express'
-import { createAdvisory, getAdvisoriesPaginated, createBulkAdvisories, getPreviousAdvisories, getPreviousAdvisoryByDetailId, loadPreviousAdvisories, getPreviousAdvisoryOptions } from '../controllers/advisoryController.js';
+import { createAdvisory, getAdvisoriesPaginated, createBulkAdvisories, loadPreviousAdvisories, getPreviousAdvisoryOptions, createAdvisoryMain, submitAdvisoryWizard } from '../controllers/advisoryController.js';
 import { updateAdvisory, deleteAdvisory } from '../controllers/advisoryController.js';
 import { authenticate, authorize, authorizePermissions } from '../middleware/authMiddleware.js'
 import { ROLE_GROUPS } from '../utils/approval.js';
@@ -7,24 +7,13 @@ import { PERMISSION_RESOURCES, PERMISSION_ACTIONS } from '../constant/index.js';
 
 const router = express.Router();
 
-router.get(
-
-    '/previous/options',
-
-    getPreviousAdvisoryOptions
-
-);
-
-
-router.get(
-
-    '/previous/load',
-
-    loadPreviousAdvisories
-
-);
 router.use(authenticate)
 router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL))
+
+router.post(
+    "/main/create",
+    createAdvisoryMain
+);
 
 router.get(
     "/paginated",
@@ -36,21 +25,22 @@ router.get(
 );
 
 router.get(
-    "/previous",
+    '/previous/options',
     authorizePermissions(
         PERMISSION_RESOURCES.ADVISORIES,
         PERMISSION_ACTIONS.READ
     ),
-    getPreviousAdvisories
+    getPreviousAdvisoryOptions
 );
 
+
 router.get(
-    "/previous/:advisoryDetailId",
+    '/previous/load',
     authorizePermissions(
         PERMISSION_RESOURCES.ADVISORIES,
         PERMISSION_ACTIONS.READ
     ),
-    getPreviousAdvisoryByDetailId
+    loadPreviousAdvisories
 );
 
 router.post(
@@ -70,6 +60,8 @@ router.post(
     ),
     createBulkAdvisories
 );
+
+router.post("/wizard/submit", submitAdvisoryWizard);
 
 router.put(
     "/:id",

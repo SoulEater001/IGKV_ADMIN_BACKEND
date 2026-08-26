@@ -232,178 +232,6 @@ export const getAdvisoriesPaginated = async (req, res) => {
     }
 };
 
-export const getPreviousAdvisories = async (req, res) => {
-
-    try {
-
-        const {
-            stateLgCode,
-            districtLgCodes,
-            blockLgCodes,
-            languageId,
-            months
-        } = req.query;
-        // console.log(req.query)
-        console.log(districtLgCodes)
-
-        if (!stateLgCode || !languageId || !months) {
-
-            return res.status(400).json({
-                success: false,
-                message: "State, language and month are required."
-            });
-
-        }
-
-        const monthList = String(months)
-            .split(',')
-            .map(Number)
-            .filter(
-                month =>
-                    Number.isInteger(month) &&
-                    month >= 1 &&
-                    month <= 12
-            );
-
-        if (monthList.length === 0) {
-
-            return res.status(400).json({
-                success: false,
-                message: "Invalid month."
-            });
-
-        }
-
-        const districtList = districtLgCodes
-            ? String(districtLgCodes)
-                .split(',')
-                .map(Number)
-                .filter(Number.isInteger)
-            : [];
-
-        const blockList = blockLgCodes
-            ? String(blockLgCodes)
-                .split(',')
-                .map(Number)
-                .filter(Number.isInteger)
-            : [];
-
-        const where = [
-            "d.state_lg_code = ?",
-            "d.language_id = ?"
-        ];
-
-        const params = [
-            stateLgCode,
-            languageId
-        ];
-
-        if (districtList.length > 0) {
-
-            where.push(
-                `d.district_lg_code IN (${districtList
-                    .map(() => '?')
-                    .join(', ')})`
-            );
-
-            params.push(...districtList);
-
-        }
-
-        if (blockList.length > 0) {
-
-            where.push(
-                `d.block_lg_code IN (${blockList
-                    .map(() => '?')
-                    .join(', ')})`
-            );
-
-            params.push(...blockList);
-
-        }
-
-        where.push(
-            `MONTH(m.advisory_date) IN (${monthList
-                .map(() => '?')
-                .join(', ')})`
-        );
-
-        params.push(...monthList);
-
-        const [rows] = await pool.query(
-            `
-            SELECT
-                d.id,
-                d.advisory_detail_id,
-                d.advisory,
-                d.language_id,
-
-                d.state_lg_code,
-                d.district_lg_code,
-                d.block_lg_code,
-
-                d.cat_id AS imd_category_id,
-                c.img_category_name AS category,
-
-                d.crop_id AS imd_crop_id,
-                cr.imd_crop_name,
-                cr.imd_crop_name_h,
-
-                d.advisory_type_id AS imd_advisory_type_id,
-                at.imd_advisory_type_name AS advisory_type,
-
-                DATE_FORMAT(
-                    m.advisory_date,
-                    '%Y-%m-%d'
-                ) AS advisory_date,
-                m.create_datetime
-
-            FROM imd_advisory_detail d
-
-            JOIN imd_advisory_main m
-                ON d.advisory_main_id = m.id
-
-            LEFT JOIN imd_m_category c
-                ON d.cat_id = c.imd_category_id
-
-            LEFT JOIN imd_m_crop cr
-                ON d.crop_id = cr.imd_crop_id
-
-            LEFT JOIN imd_advisory_type at
-                ON d.advisory_type_id = at.imd_advisory_type_id
-
-            WHERE ${where.join('\nAND ')}
-
-            ORDER BY
-                m.advisory_date DESC,
-                d.id DESC
-
-            LIMIT 100
-            `,
-            params
-        );
-
-        return res.status(200).json({
-            success: true,
-            data: rows
-        });
-
-    } catch (error) {
-
-        console.error(
-            "Error fetching previous advisories:",
-            error
-        );
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch previous advisories."
-        });
-
-    }
-
-};
-
 export const getPreviousAdvisoryOptions = async (req, res) => {
 
     try {
@@ -415,7 +243,7 @@ export const getPreviousAdvisoryOptions = async (req, res) => {
             dates
         } = req.query;
 
-        console.log(req.query)
+        // console.log(req.query)
         // -------------------------------------------------
         // Validation
         // -------------------------------------------------
@@ -1068,124 +896,6 @@ export const loadPreviousAdvisories = async (req, res) => {
             message:
                 'Failed to load previous advisories.'
 
-        });
-
-    }
-
-};
-
-export const getPreviousAdvisoryByDetailId = async (req, res) => {
-
-    try {
-
-        const { advisoryDetailId } = req.params;
-
-        if (!advisoryDetailId) {
-
-            return res.status(400).json({
-                success: false,
-                message: "Advisory detail ID is required."
-            });
-
-        }
-
-        const [rows] = await pool.query(
-            `
-            SELECT
-                d.id,
-                d.advisory_detail_id,
-
-                d.state_lg_code,
-                d.district_lg_code,
-                d.block_lg_code,
-
-                d.cat_id AS imd_category_id,
-                d.crop_id,
-
-                d.advisory_type_id AS imd_advisory_type_id,
-
-                d.advisory,
-                d.language_id,
-
-                m.advisory_date
-
-            FROM imd_advisory_detail d
-
-            JOIN imd_advisory_main m
-                ON d.advisory_main_id = m.id
-
-            WHERE d.advisory_detail_id = ?
-
-            ORDER BY d.language_id DESC
-            `,
-            [advisoryDetailId]
-        );
-
-        if (rows.length === 0) {
-
-            return res.status(404).json({
-                success: false,
-                message: "Previous advisory not found."
-            });
-
-        }
-
-        const english = rows.find(
-            row => row.language_id === 2
-        );
-
-        const hindi = rows.find(
-            row => row.language_id === 1
-        );
-
-        return res.status(200).json({
-            success: true,
-            data: {
-                advisory_detail_id: advisoryDetailId,
-
-                state_lg_code:
-                    english?.state_lg_code ??
-                    hindi?.state_lg_code,
-
-                district_lg_code:
-                    english?.district_lg_code ??
-                    hindi?.district_lg_code,
-
-                block_lg_code:
-                    english?.block_lg_code ??
-                    hindi?.block_lg_code,
-
-                imd_category_id:
-                    english?.imd_category_id ??
-                    hindi?.imd_category_id,
-
-                crop_id:
-                    english?.crop_id ??
-                    hindi?.crop_id,
-
-                imd_advisory_type_id:
-                    english?.imd_advisory_type_id ??
-                    hindi?.imd_advisory_type_id,
-
-                advisory_date:
-                    english?.advisory_date ??
-                    hindi?.advisory_date,
-
-                advisory_en: english?.advisory ?? '',
-                advisory_hi: hindi?.advisory ?? ''
-            }
-        });
-
-    } catch (error) {
-
-        console.error(
-            "Error fetching previous advisory:",
-            error
-        );
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch previous advisory."
         });
 
     }
@@ -1848,5 +1558,425 @@ export const deleteAdvisory = async (req, res) => {
 
     } finally {
         connection.release();
+    }
+};
+
+export const createAdvisoryMain = async (req, res) => {
+    let connection;
+
+    try {
+        const { advisory_date } = req.body;
+
+        if (!advisory_date) {
+            return res.status(400).json({
+                success: false,
+                message: "advisory_date is required",
+            });
+        }
+
+        connection = await pool.getConnection();
+
+        await connection.beginTransaction();
+
+        // 1. Check if advisory already exists
+
+        const [existingRows] = await connection.execute(
+            `
+                SELECT id
+                FROM imd_advisory_main
+                WHERE DATE(advisory_date) = DATE(?)
+                LIMIT 1
+            `,
+            [advisory_date]
+        );
+
+        // 2. If exists, return existing ID
+
+        if (existingRows.length > 0) {
+
+            await connection.commit();
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    id: existingRows[0].id,
+                    existing: true,
+                },
+            });
+        }
+
+        // 3. Create new advisory main
+        // LG codes intentionally remain NULL
+
+        const [insertResult] = await connection.execute(
+            `
+                INSERT INTO imd_advisory_main (
+                    advisory_date,
+                    create_datetime
+                )
+                VALUES (?, NOW())
+            `,
+            [advisory_date]
+        );
+
+        const id = insertResult.insertId;
+
+        // 4. Copy generated ID to advisory_main_id
+
+        await connection.execute(
+            `
+                UPDATE imd_advisory_main
+                SET advisory_main_id = ?
+                WHERE id = ?
+            `,
+            [id, id]
+        );
+
+        await connection.commit();
+
+        return res.status(201).json({
+            success: true,
+            data: { id, existing: false, },
+        });
+
+    } catch (error) {
+
+        if (connection) {
+            await connection.rollback();
+        }
+
+        console.error("Failed to create advisory main:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to create advisory main",
+        });
+
+    } finally {
+
+        if (connection) {
+            connection.release();
+        }
+
+    }
+};
+
+export const submitAdvisoryWizard = async (req, res) => {
+    let connection;
+
+    try {
+        const {
+            advisory_date,
+            station_id,
+            state_lg_code,
+            district_lg_code,
+            block_lg_code,
+            observations = [],
+            forecasts = [],
+            observation_summary,
+            forecast_summary,
+            advisories = [],
+        } = req.body;
+        console.log("Wizard body : ", req.body)
+        if (!advisory_date) {
+            return res.status(400).json({
+                success: false,
+                message: "advisory_date is required.",
+            });
+        }
+
+        if (!station_id) {
+            return res.status(400).json({
+                success: false,
+                message: "station_id is required.",
+            });
+        }
+
+        if (!state_lg_code || !district_lg_code) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid state_lg_code and district_lg_code are required.",
+            });
+        }
+
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+
+        // 1. Validate station
+        const [stationRows] = await connection.execute(
+            `SELECT id
+       FROM weather_station
+       WHERE id = ? AND is_active = 1
+       LIMIT 1`,
+            [station_id]
+        );
+
+        if (stationRows.length === 0) {
+            throw new Error("Invalid or inactive station.");
+        }
+
+        // 2. Validate district
+        const [districtRows] = await connection.execute(
+            `SELECT district_id
+       FROM m_district
+       WHERE district_lg_code = ?
+       LIMIT 1`,
+            [district_lg_code]
+        );
+
+        if (districtRows.length === 0) {
+            throw new Error("Invalid district.");
+        }
+
+        // 3. Validate block when provided
+        if (block_lg_code !== null && block_lg_code !== undefined) {
+            const [blockRows] = await connection.execute(
+                `SELECT block_id
+         FROM m_block
+         WHERE block_lg_code = ?
+         LIMIT 1`,
+                [block_lg_code]
+            );
+
+            if (blockRows.length === 0) {
+                throw new Error("Invalid block.");
+            }
+        }
+
+        // 4. Insert advisory main
+        const [mainResult] = await connection.execute(
+            `INSERT INTO imd_advisory_main (
+        advisory_main_id,
+        advisory_date,
+        create_datetime
+      ) VALUES (NULL, ?, NOW())`,
+            [
+                advisory_date,
+            ]
+        );
+
+        const advisory_main_id = mainResult.insertId;
+
+        // advisory_main_id must be equal to its own id
+        await connection.execute(
+            `UPDATE imd_advisory_main
+       SET advisory_main_id = ?
+       WHERE id = ?`,
+            [advisory_main_id, advisory_main_id]
+        );
+
+        // 5. Save observations only when observations are provided
+        if (Array.isArray(observations) && observations.length > 0) {
+            for (const observation of observations) {
+                await connection.execute(
+                    `INSERT INTO weather_observation (
+            station_id,
+            observation_issue_date,
+            observation_date,
+            max_temperature,
+            min_temperature,
+            rainfall,
+            relative_humidity_1,
+            relative_humidity_2,
+            vapour_pressure_1,
+            vapour_pressure_2,
+            wind_speed,
+            evaporation,
+            sunshine_hours
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        observation.station_id ?? station_id,
+                        observation.observation_issue_date ?? advisory_date,
+                        observation.observation_date,
+                        observation.max_temperature ?? null,
+                        observation.min_temperature ?? null,
+                        observation.rainfall ?? null,
+                        observation.relative_humidity_1 ?? null,
+                        observation.relative_humidity_2 ?? null,
+                        observation.vapour_pressure_1 ?? null,
+                        observation.vapour_pressure_2 ?? null,
+                        observation.wind_speed ?? null,
+                        observation.evaporation ?? null,
+                        observation.sunshine_hours ?? null,
+                    ]
+                );
+            }
+        }
+
+        // 6. Save observation summary unless existing data is reused
+        if (observation_summary?.reuse_existing !== true) {
+            const observationIssueDate =
+                observations?.[0]?.observation_issue_date ?? advisory_date;
+
+            await connection.execute(
+                `INSERT INTO weather_observation_summary (
+          station_id,
+          observation_issue_date,
+          summary_en,
+          summary_hi
+        ) VALUES (?, ?, ?, ?)`,
+                [
+                    station_id,
+                    observationIssueDate,
+                    observation_summary?.summary_en ?? null,
+                    observation_summary?.summary_hi ?? null,
+                ]
+            );
+        }
+
+        // 7. Save forecasts with the newly created advisory_main_id
+        if (Array.isArray(forecasts) && forecasts.length > 0) {
+            for (const forecast of forecasts) {
+                await connection.execute(
+                    `INSERT INTO weather_forecast (
+            advisory_main_id,
+            station_id,
+            forecast_issue_date,
+            forecast_date,
+            rainfall,
+            max_temperature,
+            min_temperature,
+            cloud_amount,
+            relative_humidity_1,
+            relative_humidity_2,
+            wind_speed,
+            wind_direction,
+            state_lg_code,
+            district_lg_code,
+            block_lg_code
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        advisory_main_id,
+                        forecast.station_id ?? station_id,
+                        forecast.forecast_issue_date ?? advisory_date,
+                        forecast.forecast_date,
+                        forecast.rainfall ?? null,
+                        forecast.max_temperature ?? null,
+                        forecast.min_temperature ?? null,
+                        forecast.cloud_amount ?? null,
+                        forecast.relative_humidity_1 ?? null,
+                        forecast.relative_humidity_2 ?? null,
+                        forecast.wind_speed ?? null,
+                        forecast.wind_direction ?? null,
+                        forecast.state_lg_code ?? state_lg_code,
+                        forecast.district_lg_code ?? district_lg_code,
+                        forecast.block_lg_code ?? block_lg_code ?? null,
+                    ]
+                );
+            }
+        }
+
+        // 8. Save forecast summary
+        if (forecast_summary) {
+            await connection.execute(
+                `INSERT INTO weather_forecast_summary (
+          advisory_main_id,
+          state_lg_code,
+          district_lg_code,
+          block_lg_code,
+          summary_en,
+          summary_hi
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+                [
+                    advisory_main_id,
+                    forecast_summary.state_lg_code ?? state_lg_code,
+                    forecast_summary.district_lg_code ?? district_lg_code,
+                    forecast_summary.block_lg_code ?? block_lg_code ?? null,
+                    forecast_summary.summary_en ?? null,
+                    forecast_summary.summary_hi ?? null,
+                ]
+            );
+        }
+
+        // 9. Save bilingual advisories
+        if (Array.isArray(advisories) && advisories.length > 0) {
+            for (const advisory of advisories) {
+                // Insert English first
+                const [englishResult] = await connection.execute(
+                    `INSERT INTO imd_advisory_detail (
+            advisory_main_id,
+            advisory_detail_id,
+            cat_id,
+            crop_id,
+            advisory_type_id,
+            advisory,
+            language_Id,
+            block_lg_code,
+            district_lg_code,
+            state_lg_code
+          ) VALUES (?, NULL, ?, ?, ?, ?, 2, ?, ?, ?)`,
+                    [
+                        advisory_main_id,
+                        advisory.imd_category_id,
+                        advisory.crop_id ?? null,
+                        advisory.imd_advisory_type_id,
+                        advisory.advisory_en ?? null,
+                        advisory.block_lg_code ?? block_lg_code ?? null,
+                        advisory.district_lg_code ?? district_lg_code,
+                        advisory.state_lg_code ?? state_lg_code,
+                    ]
+                );
+
+                const english_advisory_id = englishResult.insertId;
+
+                // English row references its own ID
+                await connection.execute(
+                    `UPDATE imd_advisory_detail
+           SET advisory_detail_id = ?
+           WHERE id = ?`,
+                    [english_advisory_id, english_advisory_id]
+                );
+
+                // Insert Hindi with the same advisory_detail_id
+                await connection.execute(
+                    `INSERT INTO imd_advisory_detail (
+            advisory_main_id,
+            advisory_detail_id,
+            cat_id,
+            crop_id,
+            advisory_type_id,
+            advisory,
+            language_Id,
+            block_lg_code,
+            district_lg_code,
+            state_lg_code
+          ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+                    [
+                        advisory_main_id,
+                        english_advisory_id,
+                        advisory.imd_category_id,
+                        advisory.crop_id ?? null,
+                        advisory.imd_advisory_type_id,
+                        advisory.advisory_hi ?? null,
+                        advisory.block_lg_code ?? block_lg_code ?? null,
+                        advisory.district_lg_code ?? district_lg_code,
+                        advisory.state_lg_code ?? state_lg_code,
+                    ]
+                );
+            }
+        }
+
+        await connection.commit();
+
+        return res.status(201).json({
+            success: true,
+            message: "Weather advisory bulletin submitted successfully.",
+        });
+    } catch (error) {
+        if (connection) {
+            await connection.rollback();
+        }
+
+        console.error("Error submitting advisory wizard:", error);
+
+        return res.status(500).json({
+            success: false,
+            message:
+                error.message || "Failed to submit weather advisory bulletin.",
+        });
+    } finally {
+        if (connection) {
+            connection.release();
+        }
     }
 };

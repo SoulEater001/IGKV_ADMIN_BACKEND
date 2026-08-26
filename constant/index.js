@@ -17,11 +17,13 @@ export const PERMISSION_RESOURCES = Object.freeze({
     CATEGORIES: "categories",
     ADVISORY_TYPES: "advisory-types",
     CROPS: "crops",
+    CROP_STAGES: "crop-stages",
     ADVISORIES: "advisories",
     STATE: "state",
     ZONE: "zone",
     DISTRICT: "district",
     BLOCK: "block",
+    WEATHER: "weather"
 });
 
 export const PERMISSION_RESOURCE_LIST = Object.freeze(

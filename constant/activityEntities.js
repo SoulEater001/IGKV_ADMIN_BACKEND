@@ -9,8 +9,11 @@ export const ENTITIES = Object.freeze({
     BLOCK: "BLOCK",
 
     CROP: "CROP",
+    CROP_STAGE: "CROP-STAGES",
     CATEGORY: "CATEGORY",
 
     ADVISORY: "ADVISORY",
-    ADVISORY_TYPE: "ADVISORY_TYPE"
+    ADVISORY_TYPE: "ADVISORY_TYPE",
+
+    WEATHER: "WEATHER"
 });

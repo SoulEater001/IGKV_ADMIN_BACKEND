@@ -15,7 +15,7 @@ export const getDistrictsPaginated = async (req, res) => {
             search = '',
             stateId
         } = req.query;
-        
+
         const pageNumber = Number(page);
 
         const pageSize = Number(limit);
@@ -167,7 +167,7 @@ export const getDistrictsPaginated = async (req, res) => {
 
 export const getDistricts = async (req, res) => {
     try {
-        const { stateId, zoneId } = req.query;
+        const { stateId, zoneId, stateLgCode, districtLgCode, } = req.query;
 
         let where = `WHERE d.deleted IS NULL`;
         const params = [];
@@ -175,6 +175,21 @@ export const getDistricts = async (req, res) => {
         if (stateId) {
             where += ` AND d.state_id = ?`;
             params.push(stateId);
+        }
+
+        if (stateLgCode) {
+            where += ` AND d.state_id = (
+        SELECT state_id
+        FROM m_state
+        WHERE state_lg_code = ?
+          AND deleted IS NULL
+    )`;
+            params.push(stateLgCode);
+        }
+
+        if (districtLgCode) {
+            where += ` AND d.district_lg_code = ?`;
+            params.push(districtLgCode);
         }
 
         if (zoneId) {
@@ -190,9 +205,14 @@ export const getDistricts = async (req, res) => {
                 hi.name AS name_hi,
                 d.state_id,
                 d.district_lg_code,
-                d.zone_id
+                d.zone_id,
+                s.state_lg_code
 
             FROM m_district d
+
+            INNER JOIN m_state s
+                ON s.state_id = d.state_id
+                AND s.deleted IS NULL
 
             LEFT JOIN m_district_language hi
                 ON hi.district_id = d.district_id

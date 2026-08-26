@@ -9,7 +9,7 @@ import { executeCreateBlock, executeDeleteBlock, executeUpdateBlock } from "../s
 export const getBlocks = async (req, res) => {
     try {
 
-        const { districtId } = req.query;
+        const { districtId, districtLgCode, blockLgCode} = req.query;
 
         let where = `WHERE b.deleted IS NULL`;
 
@@ -21,6 +21,16 @@ export const getBlocks = async (req, res) => {
             params.push(districtId);
         }
 
+        if (districtLgCode) {
+            where += ` AND d.district_lg_code = ?`;
+            params.push(districtLgCode);
+        }
+
+        if (blockLgCode) {
+            where += ` AND b.block_lg_code = ?`;
+            params.push(blockLgCode);
+        }
+
         const [rows] = await pool.query(
             `
             SELECT
@@ -28,11 +38,13 @@ export const getBlocks = async (req, res) => {
                 b.name,
                 b.district_id,
                 d.state_id,
+                d.district_lg_code,
                 b.block_lg_code
             FROM m_block b
 
             INNER JOIN m_district d
                 ON d.district_id = b.district_id
+                AND d.deleted IS NULL
 
             ${where}
 

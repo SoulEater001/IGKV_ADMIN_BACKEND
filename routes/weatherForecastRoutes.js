@@ -2,7 +2,7 @@ import express from "express";
 import { authenticate } from "../middleware/authMiddleware.js";
 import { authorize } from "../middleware/authMiddleware.js";
 import { ROLE_GROUPS } from "../utils/approval.js";
-import { bulkUpsertForecasts, getForecasts, getExistingForecastOptions, getForecastsWithOptions } from "../controllers/weatherForecastController.js";
+import { bulkUpsertForecasts, getForecasts, getExistingForecastOptions, getForecastsWithOptions, upsertWeatherForecastSummary} from "../controllers/weatherForecastController.js";
 
 const router = express.Router();
 
@@ -28,5 +28,7 @@ router.post(
   '/bulk-upsert',
   bulkUpsertForecasts
 );
+
+router.post("/summary/upsert",upsertWeatherForecastSummary);
 
 export default router;
