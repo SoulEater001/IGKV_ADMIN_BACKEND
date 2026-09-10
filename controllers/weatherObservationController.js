@@ -2,12 +2,21 @@ import { pool } from "../config/db.js";
 import { formatWeatherValue, isValidIsoDate, validateObservation } from "../utils/weatherUtils.js";
 
 export const bulkUpsertObservations = async (req, res) => {
-    const { observations } = req.body;
+    const { observations, observation_issue_date } = req.body;
 
     const connection = await pool.getConnection();
 
     try {
         await connection.beginTransaction();
+
+        if (!isValidIsoDate(observation_issue_date)) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid observation_issue_date",
+            });
+        }
 
         if (!Array.isArray(observations)) {
             await connection.rollback();
@@ -100,6 +109,7 @@ export const bulkUpsertObservations = async (req, res) => {
         const sql = `
             INSERT INTO weather_observation (
                 station_id,
+                observation_issue_date,
                 observation_date,
                 max_temperature,
                 min_temperature,
@@ -129,6 +139,7 @@ export const bulkUpsertObservations = async (req, res) => {
 
         const values = observations.map(item => [
             item.station_id,
+            observation_issue_date,
             item.observation_date,
             item.max_temperature ?? null,
             item.min_temperature ?? null,
@@ -172,8 +183,7 @@ export const bulkUpsertObservations = async (req, res) => {
 export const getExistingObservationOptions = async (req, res) => {
     try {
         const stationId = Number(req.query.stationId);
-        const year = Number(req.query.year);
-        const month = Number(req.query.month);
+        const observationIssueDate = req.query.observationIssueDate;
 
         if (!Number.isInteger(stationId) || stationId <= 0) {
             return res.status(400).json({
@@ -182,23 +192,18 @@ export const getExistingObservationOptions = async (req, res) => {
             });
         }
 
-        if (!Number.isInteger(year) || year <= 0) {
+        if (!isValidIsoDate(observationIssueDate)) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid year",
+                message: "Invalid observationIssueDate",
             });
         }
 
-        if (
-            !Number.isInteger(month) ||
-            month < 1 ||
-            month > 12
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Month must be between 1 and 12",
-            });
-        }
+        const [yearString, monthString] =
+            observationIssueDate.split("-");
+
+        const year = Number(yearString);
+        const month = Number(monthString);
 
         const years = [
             year,
@@ -266,20 +271,12 @@ export const getExistingObservationOptions = async (req, res) => {
         const data = rows.map(row => ({
             year: Number(row.year),
             month: Number(row.month),
-
-            observation_issue_date:
-                row.observation_issue_date,
-
+            observation_issue_date: row.observation_issue_date,
             start_date: row.start_date,
             end_date: row.end_date,
-
             total_days: Number(row.total_days),
-
-            summary_exists:
-                Boolean(row.summary_exists),
+            summary_exists: Boolean(row.summary_exists),
         }));
-
-        // console.log("options data :", data)
 
         return res.status(200).json({
             success: true,
@@ -287,12 +284,14 @@ export const getExistingObservationOptions = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Failed to fetch existing observation options:", error);
+        console.error(
+            "Failed to fetch existing observation options:",
+            error
+        );
 
         return res.status(500).json({
             success: false,
-            message:
-                "Failed to fetch existing observation options",
+            message: "Failed to fetch existing observation options",
         });
     }
 };

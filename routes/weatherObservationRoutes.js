@@ -6,8 +6,8 @@ import { ROLE_GROUPS } from "../utils/approval.js";
 
 const router = e.Router();
 
-// router.use(authenticate);
-// router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL));
+router.use(authenticate);
+router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL));
 
 router.get("/", getObservations);
 router.get("/existing-options",getExistingObservationOptions);

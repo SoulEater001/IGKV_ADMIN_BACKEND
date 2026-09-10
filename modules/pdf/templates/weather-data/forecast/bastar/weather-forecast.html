@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Weather Forecast Data</title>
+    <style>
+        /*WEATHER_PDF_CSS*/
+    </style>
+</head>
+
+<body>
+    <div class="header">
+
+        <div class="header-left-logo">
+            <img src="{{leftLogo}}" alt="Logo">
+        </div>
+
+        <div class="header-content">
+
+            <div class="service-title">
+                ग्रामीण कृषि मौसम सेवा
+            </div>
+
+            <div class="college-name-hi">
+                शहीद गुंडाधूर कृषि महाविद्यालय एवं अनुसंधान केन्द्र
+            </div>
+
+            <div class="college-name-en">
+                SHAHEED GUNDADHOOR COLLEGE OF AGRICULTURE &amp; RESEARCH STATION
+            </div>
+
+            <div class="university-name-hi">
+                (इंदिरा गांधी कृषि विश्वविद्यालय)
+            </div>
+
+            <div class="university-name-en">
+                (INDIRA GANDHI KRISHI VISHWAVIDYALAYA)
+            </div>
+
+            <div class="address-hi">
+                कुम्हरावंड, जगदलपुर(बस्तर) छ.ग. 494001
+            </div>
+
+            <div class="address-en">
+                KUMHRAWAND, JAGDALPUR (BASTAR) C.G. 494001
+            </div>
+
+            <div class="contact">
+                <span style="font-weight: bold;">Ph. (O)</span> - 07782 - 229360 &nbsp;
+                (R) 229343 &nbsp;
+                <span style="font-weight: bold;">Email</span> - zars_igau@rediffmail.com
+            </div>
+
+        </div>
+
+        <div class="header-right-logo">
+            <img src="{{govtLogo}}" alt="Government Logo">
+        </div>
+
+    </div>
+
+    <div class="header-divider"></div>
+
+    <div class="bulletin-info">
+        <div>
+            Bulletin No. {{bulletinNo}}
+        </div>
+
+        <div>
+            Date, {{issueDate}}
+        </div>
+    </div>
+
+    <div class="location-heading">
+        <div class="district-heading">
+            Weather Forecast for District - {{districtNameEn}}
+        </div>
+
+        {{blockHeading}}
+    </div>
+
+    <table class="weather-table">
+        <thead>
+            <tr>
+                <th>DATE</th>
+                <th>RF<br>(mm)</th>
+                <th>MAXT<br>(°C)</th>
+                <th>MINT<br>(°C)</th>
+                <th>CLOUD<br>(%)</th>
+                <th>RH I<br>(%)</th>
+                <th>RH II<br>(%)</th>
+                <th>WS<br>(kmph)</th>
+                <th>WD</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {{forecastRows}}
+        </tbody>
+    </table>
+
+    <div class="footer">
+
+        <div class="footer-app-box">
+
+            <div class="footer-app-message">
+                <span class="footer-bullet">➢</span>
+                <span>
+                    Farmers brothers are requested to register on Mausam CG app
+                    and get weather forecast and agricultural advice.
+                </span>
+            </div>
+
+            <div class="footer-app-link">
+                Link-
+                <a href="https://play.google.com/store/apps/details?id=digital.svara.mausamcg.twa">
+                    https://play.google.com/store/apps/details?id=digital.svara.mausamcg.twa
+                </a>
+            </div>
+
+        </div>
+
+        <div class="footer-sponsor">
+            Sponsor: Indian Meteorological Department
+            (Ministry of Earth Sciences) New Delhi.
+        </div>
+
+        <div class="footer-signatories">
+
+            <div class="footer-signatory footer-left">
+                <div class="footer-designation">
+                    Nodal Officer
+                </div>
+                <div class="footer-organization">
+                    GKMS
+                </div>
+            </div>
+
+            <div class="footer-signatory footer-right">
+                <div class="footer-designation">
+                    DEAN
+                </div>
+                <div class="footer-organization">
+                    SGCARS, Jagdalpur
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    </div>
+</body>
+
+</html>

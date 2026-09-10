@@ -108,7 +108,7 @@ export function initMQTT() {
         data = msg;
       }
 
-      // console.log(`📩 MQTT → ${topic}`, data);
+      console.log(`📩 MQTT → ${topic}`, data);
 
       switch (msgType) {
         case "status": {
@@ -127,7 +127,7 @@ export function initMQTT() {
           if (cacheResult.wasOffline) {
             console.log(`🟢 Device back online: ${deviceId}`);
 
-            await updateDeviceStatus(deviceId,"ONLINE");
+            await updateDeviceStatus(deviceId, "ONLINE");
           }
           await clearNotification(deviceId, "offline");
           console.log(`💓 ${deviceId} heartbeat received`);
@@ -139,7 +139,7 @@ export function initMQTT() {
             const mappedData = mapHardwareToDatabase(data);
 
             if (Object.keys(mappedData).length > 0) {
-              // await saveSensorData(deviceId, mappedData);
+              await saveSensorData(deviceId, mappedData);
 
               const cacheResult = await updateDeviceCache(deviceId, mappedData);
               if (cacheResult.wasOffline) {
@@ -149,7 +149,7 @@ export function initMQTT() {
                 await updateDeviceStatus(deviceId, "ONLINE");
               }
 
-              // console.log(`📦 Cached ${Object.keys(mappedData).length} readings for ${deviceId}`);
+              console.log(`📦 Cached ${Object.keys(mappedData).length} readings for ${deviceId}`);
 
               if (wsBroadcast) {
                 wsBroadcast({
@@ -196,9 +196,9 @@ export function initMQTT() {
             const mappedData = mapHardwareToDatabase(data);
 
             if (Object.keys(mappedData).length) {
-              // await saveSensorData(deviceId, mappedData).catch((err) =>
-              //   console.log("❌ Health save error:", err)
-              // );
+              await saveSensorData(deviceId, mappedData).catch((err) =>
+                console.log("❌ Health save error:", err)
+              );
             }
 
             if (typeof data.batteryPercentage === "number") {
@@ -224,9 +224,9 @@ export function initMQTT() {
             const mappedData = mapHardwareToDatabase(data);
 
             if (Object.keys(mappedData).length) {
-              // await saveSensorData(deviceId, mappedData).catch((err) =>
-              //   console.log("❌ saveSensorData error:", err)
-              // );
+              await saveSensorData(deviceId, mappedData).catch((err) =>
+                console.log("❌ saveSensorData error:", err)
+              );
             }
           }
         }

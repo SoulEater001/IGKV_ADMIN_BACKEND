@@ -44,7 +44,7 @@ async function getCropDistribution() {
 
 async function getDistrictDistribution(cropCode = null) {
   const params = [];
-  console.log(cropCode)
+  // console.log(cropCode)
   let cropFilter = '';
 
   if (cropCode !== null && cropCode !== undefined) {

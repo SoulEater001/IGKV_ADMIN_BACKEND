@@ -1,0 +1,353 @@
+@page {
+    size: A4 portrait;
+    margin: 15mm 10mm 15mm 10mm;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "Times New Roman", serif;
+    font-size: 10px;
+    color: #000;
+    background: #fff;
+}
+
+.report {
+    width: 100%;
+}
+
+/* HEADER */
+
+.header {
+    position: relative;
+    width: 100%;
+    min-height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.header-content {
+    width: 100%;
+    text-align: center;
+    line-height: 1.05;
+}
+
+.service-title {
+    font-size: 20px;
+    font-weight: normal;
+    margin-bottom: 3px;
+    text-decoration: underline;
+    color: #00B050;
+}
+
+.college-name-hi {
+    font-size: 16px;
+    font-weight: normal;
+}
+
+.college-name-en {
+    font-size: 15px;
+    font-weight: bold;
+    margin-top: 2px;
+    letter-spacing: -0.6px;
+    word-spacing: -0.3px;
+}
+
+.university-name-hi {
+    font-size: 14px;
+    margin-top: 2px;
+}
+
+.university-name-en {
+    font-size: 13px;
+    font-weight: bold;
+    margin-top: 1px;
+}
+
+.address-hi {
+    font-size: 13px;
+    margin-top: 3px;
+}
+
+.address-en {
+    font-size: 13px;
+    font-weight: bold;
+    margin-top: 1px;
+}
+
+.contact {
+    font-size: 10px;
+    margin-top: 5px;
+}
+
+
+.header-left-logo {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 72px;
+    height: 72px;
+}
+
+.header-left-logo img {
+    display: block;
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+}
+
+
+.header-right-logo {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 100px;
+    height: 120px;
+    /* border: 1px solid black; */
+}
+
+.header-right-logo img {
+    display: block;
+    width: 100px;
+    height: 120px;
+    object-fit: contain;
+    /* border: 1px solid red; */
+}
+
+.header-divider {
+    width: 100%;
+    border-top: 2px dotted #4b5fc5;
+    margin-top: 2px;
+}
+
+.bulletin-info {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 12px 0 12px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* LOCATION HEADING */
+
+.location-heading {
+    width: 100%;
+    text-align: center;
+    margin-top: 0px;
+    margin-bottom: 8px;
+    line-height: 1.25;
+}
+
+.district-heading {
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.block-heading {
+    font-size: 13px;
+    font-weight: bold;
+    margin-top: 2px;
+}
+
+/* TABLE */
+
+.weather-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    table-layout: fixed;
+    border: 1px solid #000;
+}
+
+.weather-table th,
+.weather-table td {
+    border: 1px solid #000 !important;
+    text-align: center;
+    vertical-align: middle;
+    padding: 2px 1px;
+}
+
+.weather-table th {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.05;
+    height: 34px;
+}
+
+.weather-table td {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    height: 24px;
+    white-space: nowrap;
+}
+
+/* COLUMN WIDTHS */
+
+.weather-table th:nth-child(1),
+.weather-table td:nth-child(1) {
+    width: 18%;
+}
+
+.weather-table th:nth-child(2),
+.weather-table td:nth-child(2) {
+    width: 10%;
+}
+
+.weather-table th:nth-child(3),
+.weather-table td:nth-child(3),
+.weather-table th:nth-child(4),
+.weather-table td:nth-child(4) {
+    width: 11%;
+}
+
+.weather-table th:nth-child(5),
+.weather-table td:nth-child(5) {
+    width: 11%;
+}
+
+.weather-table th:nth-child(6),
+.weather-table td:nth-child(6),
+.weather-table th:nth-child(7),
+.weather-table td:nth-child(7) {
+    width: 11%;
+}
+
+.weather-table th:nth-child(8),
+.weather-table td:nth-child(8) {
+    width: 10%;
+}
+
+.weather-table th:nth-child(9),
+.weather-table td:nth-child(9) {
+    width: 7%;
+}
+
+/* =========================
+   FOOTER
+   ========================= */
+
+.footer {
+    width: 100%;
+    margin-top: 18px;
+    font-size: 11px;
+    line-height: 1.25;
+}
+
+
+/* =========================
+   MAUSAM CG MESSAGE BOX
+   ========================= */
+
+.footer-app-box {
+    width: 80%;
+    margin: 0 auto;
+    border: 1px solid #000;
+    padding: 7px 10px 6px 10px;
+    box-sizing: border-box;
+}
+
+.footer-app-message {
+    display: flex;
+    align-items: flex-start;
+    font-weight: bold;
+    line-height: 1.3;
+}
+
+.footer-bullet {
+    flex: 0 0 auto;
+    margin-right: 7px;
+    font-size: 12px;
+}
+
+.footer-app-link {
+    margin-top: 2px;
+    margin-left: 20px;
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.footer-app-link a {
+    color: #0000ee;
+    text-decoration: underline;
+}
+
+
+/* =========================
+   SPONSOR
+   ========================= */
+
+.footer-sponsor {
+    width: 100%;
+    margin-top: 5px;
+    text-align: center;
+    font-weight: bold;
+    font-style: italic;
+    font-size: 13px;
+}
+
+
+/* =========================
+   SIGNATORIES
+   ========================= */
+
+.footer-signatories {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    margin-top: 18px;
+}
+
+.footer-signatory {
+    width: 45%;
+    font-weight: bold;
+    text-align: center;
+    font-size: 12px;
+}
+
+.footer-left {
+    text-align: center;
+}
+
+.footer-right {
+    text-align: center;
+}
+
+.footer-designation {
+    margin-bottom: 2px;
+}
+
+.footer-organization {
+    line-height: 1.2;
+}
+
+/* =========================
+   PRINT / PAGE BREAK
+   ========================= */
+
+.page-break {
+    page-break-before: always;
+}
+
+.no-break {
+    page-break-inside: avoid;
+}

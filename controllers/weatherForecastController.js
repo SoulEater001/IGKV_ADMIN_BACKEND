@@ -454,7 +454,7 @@ export const getExistingForecastOptions = async (req, res) => {
 
             summary_exists: Boolean(row.summary_exists),
         }));
-        console.log("forecast option : ", data)
+        // console.log("forecast option : ", data)
 
         return res.status(200).json({
             success: true,

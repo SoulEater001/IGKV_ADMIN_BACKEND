@@ -1,5 +1,5 @@
 import mysql from "mysql2/promise";
-import fs from "fs"
+
 export const pool = mysql.createPool({
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
@@ -19,7 +19,7 @@ export const pool = mysql.createPool({
 async function test() {
     try {
         const [rows] = await pool.query("SELECT 1");
-        console.log("Connected to MariaDB");
+        console.log("Connected to CropDoctor DB");
     } catch (err) {
         console.error(err);
     }

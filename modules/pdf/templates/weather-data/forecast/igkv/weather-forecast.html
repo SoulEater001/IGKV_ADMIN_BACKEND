@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Weather Forecast Data</title>
+    <style>
+        /*WEATHER_PDF_CSS*/
+    </style>
+</head>
+
+<body>
+    <div class="report">
+
+        <div class="header">
+            <div class="logo-container">
+                <img src="{{logo}}" class="logo" alt="IGKV Logo">
+            </div>
+
+            <div class="header-text">
+                <div class="department">
+                    Department of Agriculture Meteorology
+                </div>
+
+                <div class="university">
+                    Indira Gandhi Krishi Vishwavidyalaya
+                </div>
+
+                <div class="address">
+                    Krishak Nagar, Raipur – 492012 (C.G.)
+                </div>
+
+                <div class="report-title-container">
+                    <div class="report-title">
+                        Daily Weather Forecast of {{reportMonth}} -{{reportYear}}
+                    </div>
+
+                    <div class="report-line"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="location-heading">
+            <div class="district-heading">
+                Weather Forecast for District - {{districtNameEn}}
+            </div>
+
+            {{blockHeading}}
+        </div>
+
+        <table class="weather-table">
+            <thead>
+                <tr>
+                    <th>DATE</th>
+                    <th>RF<br>(mm)</th>
+                    <th>MAXT<br>(°C)</th>
+                    <th>MINT<br>(°C)</th>
+                    <th>CLOUD<br>(%)</th>
+                    <th>RH I<br>(%)</th>
+                    <th>RH II<br>(%)</th>
+                    <th>WS<br>(kmph)</th>
+                    <th>WD</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {{forecastRows}}
+            </tbody>
+        </table>
+
+        <div class="footer">
+            Data Centre
+        </div>
+
+    </div>
+</body>
+
+</html>

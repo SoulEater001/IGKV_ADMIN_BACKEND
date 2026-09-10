@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="hi">
+
+<head>
+    <meta charset="UTF-8">
+    <title>दैनिक कृषि मौसम बुलेटिन</title>
+
+    <style>
+        /*WEATHER_PDF_CSS*/
+    </style>
+</head>
+
+<body>
+
+    <div class="report">
+
+        <!-- ==================== HEADER ==================== -->
+
+        <div class="header">
+
+            <div class="header-left-logo">
+                <img src="{{leftLogo}}" alt="लोगो">
+            </div>
+
+            <div class="header-content">
+
+                <div class="service-title">
+                    ग्रामीण कृषि मौसम सेवा
+                </div>
+
+                <div class="college-name-hi">
+                    शहीद गुंडाधूर कृषि महाविद्यालय एवं अनुसंधान केन्द्र
+                </div>
+
+                <div class="college-name-en">
+                    SHAHEED GUNDADHOOR COLLEGE OF AGRICULTURE &amp; RESEARCH STATION
+                </div>
+
+                <div class="university-name-hi">
+                    (इंदिरा गांधी कृषि विश्वविद्यालय)
+                </div>
+
+                <div class="university-name-en">
+                    (INDIRA GANDHI KRISHI VISHWAVIDYALAYA)
+                </div>
+
+                <div class="address-hi">
+                    कुम्हरावंड, जगदलपुर(बस्तर) छ.ग. 494001
+                </div>
+
+                <div class="address-en">
+                    KUMHRAWAND, JAGDALPUR (BASTAR) C.G. 494001
+                </div>
+
+                <div class="contact">
+                    <span style="font-weight: bold;">दूरभाष</span> - 07782 - 229360
+                    &nbsp;
+                    (R) 229343
+                    &nbsp;
+                    <span style="font-weight: bold;">ई-मेल</span> - zars_igau@rediffmail.com
+                </div>
+
+            </div>
+
+            <div class="header-right-logo">
+                <img src="{{govtLogo}}" alt="शासकीय लोगो">
+            </div>
+
+        </div>
+
+
+        <!-- ==================== DIVIDER ==================== -->
+
+        <div class="header-divider"></div>
+
+
+        <!-- ==================== BULLETIN INFO ==================== -->
+
+        <div class="bulletin-info">
+
+            <div>
+                बुलेटिन क्रमांक - {{bulletinNo}}
+            </div>
+
+            <div>
+                दिनांक - {{issueDate}}
+            </div>
+
+        </div>
+
+
+        <!-- ==================== OBSERVATION ==================== -->
+
+        <div class="section-heading">
+            {{observationHeading}}
+        </div>
+
+        <div class="observation-summary-wrapper">
+
+            {{observationSummaryTable}}
+
+        </div>
+
+        {{observationSummarySection}}
+
+
+        <!-- ==================== FORECAST ==================== -->
+
+        <div class="section-heading forecast-section-heading">
+            {{forecastHeading}}
+        </div>
+
+        <table class="weather-table forecast-table">
+
+            <thead>
+
+                <tr>
+                    <th>दिनांक</th>
+                    <th>वर्षा<br>(मिमी)</th>
+                    <th>अधिकतम तापमान<br>(°C)</th>
+                    <th>न्यूनतम तापमान<br>(°C)</th>
+                    <th>बादल<br>(%)</th>
+                    <th>सापेक्ष आर्द्रता I<br>(%)</th>
+                    <th>सापेक्ष आर्द्रता II<br>(%)</th>
+                    <th>हवा की गति<br>(किमी/घंटा)</th>
+                    <th>हवा की दिशा</th>
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+                {{forecastRows}}
+
+            </tbody>
+
+        </table>
+
+        {{forecastSummarySection}}
+
+
+        <!-- ==================== ADVISORY ==================== -->
+
+        <div class="section-heading advisory-section-heading">
+            मौसम आधारित कृषि सलाह
+        </div>
+
+
+        <!-- ==================== ADVISORY TYPE BASED ==================== -->
+        <div class="advisory-type-section">
+
+            <div class="advisory-type-block {{generalAdvisorySectionClass}}">
+                <div class="advisory-type-heading">
+                    सामान्य सलाह -
+                </div>
+
+                <div class="advisory-type-content">
+                    {{generalAdvisorySection}}
+                </div>
+            </div>
+
+            <div class="advisory-type-block {{messageAdvisorySectionClass}}">
+                <div class="advisory-type-heading">
+                    संदेश सलाह -
+                </div>
+
+                <div class="advisory-type-content">
+                    {{messageAdvisorySection}}
+                </div>
+            </div>
+
+            <div class="advisory-type-block {{weatherWarningImpactSectionClass}}">
+                <div class="advisory-type-heading">
+                    मौसम की चेतावनी का कृषि पर संभावित प्रभाव -
+                </div>
+
+                <div class="advisory-type-content">
+                    {{weatherWarningImpactSection}}
+                </div>
+            </div>
+
+            <div class="advisory-type-block {{agrometAdvisorySectionClass}}">
+                <div class="advisory-type-heading">
+                    कृषि मौसम सलाह
+                </div>
+
+                <div class="advisory-type-content">
+                    {{agrometAdvisorySection}}
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- ==================== CROP BASED ADVISORIES ==================== -->
+
+        <div class="advisory-section">
+
+            <table class="advisory-table">
+
+                <thead>
+
+                    <tr>
+                        <th>फसल का नाम</th>
+                        <th>फसल अवस्था</th>
+                        <th>सामान्य प्रस्तावित कृषि क्रियाएं</th>
+                        <th>मौसम आधारित कृषि सलाह</th>
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    {{advisoryRows}}
+
+                </tbody>
+
+            </table>
+
+            <div class="advisory-note">
+                टिप्पणी: किसान भाई धयान रखे कि वे रासायनिक दवाओं और कीटनाशकों का छिड़काव तभी करे जब कम से कम 4 घंटे वर्षा
+                होने की संभावना न हो।
+            </div>
+
+        </div>
+
+
+        <!-- ==================== CATEGORY BASED ADVISORIES ==================== -->
+
+        <div class="advisory-category-section">
+
+            <div class="advisory-category-block {{animalHusbandryPoultrySectionClass}}">
+                <div class="advisory-category-heading">
+                    पशुपालन एवं मुर्गीपालन
+                </div>
+
+                <div class="advisory-category-content">
+                    {{animalHusbandryPoultrySection}}
+                </div>
+            </div>
+
+            <div class="advisory-category-block {{fruitVegetableSectionClass}}">
+                <div class="advisory-category-heading">
+                    फल एवं सब्जी वाली फसलें
+                </div>
+
+                <div class="advisory-category-content">
+                    {{fruitVegetableSection}}
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- ==================== FOOTER ==================== -->
+
+        <div class="footer">
+
+            <div class="footer-app-box">
+
+                <div class="footer-app-message">
+
+                    <span class="footer-bullet">➢</span>
+
+                    <span>
+                        कृषक भाईयों से अनुरोध है कि मौसम सीजी ऐप पर पंजीकरण करें तथा मौसम पूर्वानुमान एवं कृषि सलाह
+                        प्राप्त करें।
+                    </span>
+
+                </div>
+
+                <div class="footer-app-link">
+
+                    लिंक -
+                    <a href="https://play.google.com/store/apps/details?id=digital.svara.mausamcg.twa">
+                        https://play.google.com/store/apps/details?id=digital.svara.mausamcg.twa
+                    </a>
+
+                </div>
+
+            </div>
+
+
+            <div class="footer-sponsor">
+
+                प्रायोजक: भारतीय मौसम विज्ञान विभाग
+                (पृथ्वी विज्ञान मंत्रालय), नई दिल्ली।
+
+            </div>
+
+
+            <div class="footer-signatories">
+
+                <div class="footer-signatory footer-left">
+
+                    <div class="footer-designation">
+                        नोडल अधिकारी
+                    </div>
+
+                    <div class="footer-organization">
+                        GKMS
+                    </div>
+
+                </div>
+
+
+                <div class="footer-signatory footer-right">
+
+                    <div class="footer-designation">
+                        अधिष्ठाता
+                    </div>
+
+                    <div class="footer-organization">
+                        SGCARS, जगदलपुर
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</body>
+
+</html>

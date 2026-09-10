@@ -35,6 +35,7 @@ import farmerRoutes from './routes/farmer.routes.js'
 import filterRoutes from './routes/filters.routes.js'
 import chartRoutes from './routes/chart.routes.js'
 import deviceRoutes from './routes/device.routes.js'
+import weatherPdfRoutes from './modules/pdf/routes/weather-pdf.routes.ts'
 
 const PORT = process.env.PORT;
 const app = express();
@@ -82,6 +83,7 @@ app.use("/api/farmers", farmerRoutes);
 app.use("/api/filters", filterRoutes);
 app.use("/api/charts", chartRoutes);
 app.use("/api/devices", deviceRoutes);
+app.use('/api/pdf',weatherPdfRoutes);
 
 async function startServer() {
     try {

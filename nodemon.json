@@ -1,0 +1,22 @@
+{
+  "watch": [
+    "index.js",
+    "config",
+    "controllers",
+    "middleware",
+    "models",
+    "modules",
+    "queries",
+    "routes",
+    "seed",
+    "services",
+    "utils",
+    "websocket"
+  ],
+  "ext": "js,ts,html,css,json",
+  "ignore": [
+    "node_modules",
+    "package-lock.json"
+  ],
+  "exec": "node ./index.js"
+}

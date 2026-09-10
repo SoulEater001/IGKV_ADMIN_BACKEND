@@ -1,0 +1,621 @@
+@page {
+    size: A4 portrait;
+    margin: 4.9mm 13.3mm 15mm 17.4mm;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "Times New Roman", serif;
+    font-size: 10px;
+    color: #000;
+    background: #fff;
+}
+
+.report {
+    width: 100%;
+}
+
+/* =========================
+   HEADER
+   ========================= */
+
+.header {
+    position: relative;
+    width: 100%;
+    min-height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-content {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: center;
+    line-height: 1.05;
+}
+
+.service-title {
+    font-size: 20px;
+    font-weight: normal;
+    margin-bottom: 3px;
+    text-decoration: underline;
+    color: #00B050;
+}
+
+.college-name-hi {
+    font-size: 16px;
+    font-weight: normal;
+}
+
+.college-name-en {
+    font-size: 15px;
+    font-weight: bold;
+    margin-top: 2px;
+    letter-spacing: -0.6px;
+    word-spacing: -0.3px;
+}
+
+.university-name-hi {
+    font-size: 14px;
+    margin-top: 2px;
+}
+
+.university-name-en {
+    font-size: 13px;
+    font-weight: bold;
+    margin-top: 1px;
+}
+
+.address-hi {
+    font-size: 13px;
+    margin-top: 3px;
+}
+
+.address-en {
+    font-size: 13px;
+    font-weight: bold;
+    margin-top: 1px;
+}
+
+.contact {
+    font-size: 10px;
+    margin-top: 5px;
+}
+
+/* =========================
+   LOGOS
+   ========================= */
+
+.header-left-logo {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 72px;
+    height: 72px;
+}
+
+.header-left-logo img {
+    display: block;
+    width: 72px;
+    height: 72px;
+    object-fit: contain;
+}
+
+.header-right-logo {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 100px;
+    height: 120px;
+}
+
+.header-right-logo img {
+    display: block;
+    width: 100px;
+    height: 120px;
+    object-fit: contain;
+}
+
+.header-right-logo img[src=""] {
+    display: none;
+}
+
+/* =========================
+   HEADER DIVIDER
+   ========================= */
+
+.header-divider {
+    width: 100%;
+    border-top: 2px dotted #4b5fc5;
+    margin-top: 2px;
+}
+
+/* =========================
+   BULLETIN INFO
+   ========================= */
+
+.bulletin-info {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 12px 0;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* =========================
+   SECTION HEADINGS
+   ========================= */
+
+.section-heading {
+    width: 100%;
+    text-align: center;
+    font-size: 15px;
+    font-weight: bold;
+    margin-top: 12px;
+    margin-bottom: 5px;
+    text-decoration: underline;
+}
+
+.forecast-section-heading {
+    margin-top: 18px;
+}
+
+.advisory-section-heading {
+    margin-top: 18px;
+}
+
+/* =========================
+   OBSERVATION SUMMARY
+   ========================= */
+
+.observation-summary-wrapper {
+    width: 100%;
+    margin-top: 8px;
+    margin-bottom: 10px;
+}
+
+.observation-summary-table {
+    width: 63%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    font-size: 15px;
+}
+
+.observation-summary-table td {
+    border: 1px solid #000;
+    padding: 3px 8px;
+    height: 21px;
+    vertical-align: middle;
+}
+
+.observation-summary-label {
+    width: 65%;
+    font-weight: normal;
+    text-align: left;
+}
+
+.observation-summary-value {
+    width: 35%;
+    text-align: center;
+    font-weight: normal;
+    vertical-align: middle;
+}
+
+.humidity-main-label {
+    line-height: 1.25;
+}
+
+.humidity-inline-label {
+    margin-left: 8px;
+}
+
+.humidity-afternoon {
+    margin-top: 2px;
+    margin-left: 0;
+}
+
+.humidity-value {
+    text-align: center;
+    line-height: 1.5;
+}
+
+/* =========================
+   WEATHER TABLE
+   ========================= */
+
+.weather-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    table-layout: fixed;
+    border: 1px solid #000;
+    page-break-inside: auto;
+}
+
+.weather-table thead {
+    display: table-header-group;
+}
+
+.weather-table tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+}
+
+.weather-table th,
+.weather-table td {
+    border: 1px solid #000 !important;
+    text-align: center;
+    vertical-align: middle;
+    padding: 2px 1px;
+}
+
+.weather-table th {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.05;
+    height: 34px;
+}
+
+.weather-table td {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    height: 23px;
+    white-space: nowrap;
+}
+
+/* =========================
+   FORECAST TABLE WIDTHS
+   ========================= */
+
+.forecast-table th:nth-child(1),
+.forecast-table td:nth-child(1) {
+    width: 18%;
+}
+
+.forecast-table th:nth-child(2),
+.forecast-table td:nth-child(2) {
+    width: 10%;
+}
+
+.forecast-table th:nth-child(3),
+.forecast-table td:nth-child(3),
+.forecast-table th:nth-child(4),
+.forecast-table td:nth-child(4) {
+    width: 11%;
+}
+
+.forecast-table th:nth-child(5),
+.forecast-table td:nth-child(5) {
+    width: 11%;
+}
+
+.forecast-table th:nth-child(6),
+.forecast-table td:nth-child(6),
+.forecast-table th:nth-child(7),
+.forecast-table td:nth-child(7) {
+    width: 11%;
+}
+
+.forecast-table th:nth-child(8),
+.forecast-table td:nth-child(8) {
+    width: 10%;
+}
+
+.forecast-table th:nth-child(9),
+.forecast-table td:nth-child(9) {
+    width: 7%;
+}
+
+/* =========================
+   WEATHER SUMMARY
+   ========================= */
+
+.weather-summary {
+    width: 100%;
+    margin-top: 6px;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+}
+
+.weather-summary p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: justify;
+}
+
+.weather-summary strong {
+    font-weight: bold;
+}
+
+/* =========================
+   ADVISORY TYPE SECTIONS
+   ========================= */
+
+.advisory-type-section {
+    width: 100%;
+    margin-top: 10px;
+    page-break-inside: auto;
+}
+
+.advisory-type-block {
+    width: 100%;
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+}
+
+.advisory-type-heading {
+    width: 100%;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 4px;
+    /* text-decoration: underline; */
+}
+
+.advisory-type-content {
+    width: 100%;
+    font-size: 13px;
+    line-height: 1.35;
+    text-align: left;
+}
+
+/* =========================
+   CROP ADVISORY TABLE
+   ========================= */
+
+.advisory-section {
+    width: 100%;
+    margin-top: 10px;
+    page-break-inside: auto;
+}
+
+.advisory-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    table-layout: fixed;
+    border: 1px solid #000;
+}
+
+.advisory-table thead {
+    display: table-header-group;
+}
+
+.advisory-table tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+}
+
+.advisory-table th,
+.advisory-table td {
+    border: 1px solid #000 !important;
+    vertical-align: top;
+    padding: 5px 6px;
+}
+
+.advisory-table th {
+    text-align: center;
+    font-size: 13px;
+    font-weight: bold;
+    line-height: 1.1;
+}
+
+.advisory-table td {
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+/* =========================
+   ADVISORY COLUMN WIDTHS
+   ========================= */
+
+.advisory-table th:nth-child(1),
+.advisory-table td:nth-child(1) {
+    width: 17%;
+}
+
+.advisory-table th:nth-child(2),
+.advisory-table td:nth-child(2) {
+    width: 17%;
+}
+
+.advisory-table th:nth-child(3),
+.advisory-table td:nth-child(3) {
+    width: 33%;
+}
+
+.advisory-table th:nth-child(4),
+.advisory-table td:nth-child(4) {
+    width: 33%;
+}
+
+/* =========================
+   ADVISORY TEXT
+   ========================= */
+
+.advisory-text {
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    text-align: left;
+}
+
+.advisory-crop {
+    font-weight: bold;
+    text-align: center;
+}
+
+.advisory-crop-stage {
+    font-weight: 600;
+    text-align: center;
+}
+
+.advisory-note {
+    font-weight: 600;
+    color: red;
+    font-size: 13px;
+    padding: 2px 10px;
+}
+
+/* =========================
+   ADVISORY BULLETS
+   ========================= */
+
+.advisory-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.advisory-list li {
+    margin-bottom: 3px;
+    padding-left: 2px;
+}
+
+/* =========================
+   ANIMAL / FRUIT CATEGORY
+   ========================= */
+
+.advisory-category-section {
+    width: 100%;
+    margin-top: 12px;
+    page-break-inside: auto;
+}
+
+.advisory-category-block {
+    width: 100%;
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+}
+
+.advisory-category-heading {
+    width: 100%;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    /* text-decoration: underline; */
+}
+
+.advisory-category-content {
+    width: 100%;
+    font-size: 13px;
+    line-height: 1.35;
+    text-align: left;
+}
+
+.advisory-category-content .advisory-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.advisory-category-content .advisory-list li {
+    margin-bottom: 3px;
+    padding-left: 2px;
+}
+
+/* =========================
+   FOOTER
+   ========================= */
+
+.footer {
+    width: 100%;
+    margin-top: 18px;
+    font-size: 11px;
+    line-height: 1.25;
+}
+
+.footer-app-box {
+    width: 80%;
+    margin: 0 auto;
+    border: 1px solid #000;
+    padding: 7px 10px 6px;
+}
+
+.footer-app-message {
+    display: flex;
+    align-items: flex-start;
+    font-weight: bold;
+    line-height: 1.3;
+}
+
+.footer-bullet {
+    flex: 0 0 auto;
+    margin-right: 7px;
+    font-size: 12px;
+}
+
+.footer-app-link {
+    margin-top: 2px;
+    margin-left: 20px;
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.footer-app-link a {
+    color: #0000ee;
+    text-decoration: underline;
+}
+
+.footer-sponsor {
+    width: 100%;
+    margin-top: 5px;
+    text-align: center;
+    font-weight: bold;
+    font-style: italic;
+    font-size: 13px;
+}
+
+.footer-signatories {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    margin-top: 18px;
+}
+
+.footer-signatory {
+    width: 45%;
+    font-weight: bold;
+    text-align: center;
+    font-size: 12px;
+}
+
+.footer-designation {
+    margin-bottom: 2px;
+}
+
+.footer-organization {
+    line-height: 1.2;
+}
+
+/* =========================
+   PAGE BREAK
+   ========================= */
+
+.page-break {
+    break-before: page;
+    page-break-before: always;
+}
+
+.no-break {
+    page-break-inside: avoid;
+}
+
+.hidden{
+    display: none;
+}

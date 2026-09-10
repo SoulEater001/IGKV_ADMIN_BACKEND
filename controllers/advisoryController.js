@@ -1454,7 +1454,7 @@ export const submitAdvisoryWizard = async (req, res) => {
             forecast_summary,
             advisories = [],
         } = req.body;
-        console.log("Wizard body : ", req.body)
+        // console.log("Wizard body : ", req.body)
         if (!advisory_date) {
             return res.status(400).json({
                 success: false,

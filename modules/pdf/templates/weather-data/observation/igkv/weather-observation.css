@@ -1,0 +1,194 @@
+@page {
+    size: A4 portrait;
+    margin: 8mm 10mm 8mm 10mm;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "Times New Roman", serif;
+    font-size: 10px;
+    color: #000;
+    background: #fff;
+}
+
+.report {
+    width: 100%;
+}
+
+/* HEADER */
+.header {
+    position: relative;
+    width: 100%;
+    height: 105px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.logo-container {
+    position: absolute;
+    left: 35px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 60px;
+    height: 60px;
+}
+
+.logo {
+    display: block;
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+}
+
+.header-text {
+    text-align: center;
+    line-height: 1.2;
+    padding-top: 0;
+}
+
+.department {
+    font-size: 20px;
+    font-weight: normal;
+}
+
+.university {
+    font-size: 19px;
+    font-weight: normal;
+    margin-top: 2px;
+}
+
+.address {
+    font-size: 14px;
+    margin-top: 2px;
+}
+
+.report-title-container {
+    display: inline-block;
+    margin-top: 4px;
+}
+
+.report-title {
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.report-line {
+    width: 100%;
+    border-top: 2px solid #000;
+    margin-top: 0px;
+}
+
+/* .report-line {
+    border: 1px solid black;
+    max-width: 300px;
+    margin: 6px auto 0;
+} */
+
+/* TABLE */
+.weather-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    table-layout: fixed;
+    border: 1px solid #000;
+}
+
+.weather-table th,
+.weather-table td {
+    border: 1px solid #000 !important;
+    text-align: center;
+    vertical-align: middle;
+    padding: 2px 1px;
+}
+
+.weather-table th {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.05;
+    height: 34px;
+}
+
+.weather-table td {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    height: 24px;
+    white-space: nowrap;
+}
+
+/* COLUMN WIDTHS */
+.weather-table th:nth-child(1),
+.weather-table td:nth-child(1) {
+    width: 16%;
+}
+
+.weather-table th:nth-child(2),
+.weather-table td:nth-child(2),
+.weather-table th:nth-child(3),
+.weather-table td:nth-child(3) {
+    width: 8.5%;
+}
+
+.weather-table th:nth-child(4),
+.weather-table td:nth-child(4) {
+    width: 9%;
+}
+
+.weather-table th:nth-child(5),
+.weather-table td:nth-child(5),
+.weather-table th:nth-child(6),
+.weather-table td:nth-child(6) {
+    width: 8%;
+}
+
+.weather-table th:nth-child(7),
+.weather-table td:nth-child(7),
+.weather-table th:nth-child(8),
+.weather-table td:nth-child(8) {
+    width: 9.5%;
+}
+
+.weather-table th:nth-child(9),
+.weather-table td:nth-child(9) {
+    width: 9.5%;
+}
+
+.weather-table th:nth-child(10),
+.weather-table td:nth-child(10) {
+    width: 9%;
+}
+
+.weather-table th:nth-child(11),
+.weather-table td:nth-child(11) {
+    width: 9%;
+}
+
+/* SUMMARY */
+.summary-row {
+    font-weight: bold;
+}
+
+.summary-row td {
+    font-weight: bold;
+    height: 25px;
+}
+
+/* FOOTER */
+.footer {
+    margin-top: 45px;
+    text-align: right;
+    padding-right: 8px;
+    font-size: 11px;
+    font-weight: bold;
+}
