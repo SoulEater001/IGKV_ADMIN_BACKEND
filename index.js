@@ -13,6 +13,7 @@ import { initMQTT } from "./middleware/mqttClient.js";
 import authRoutes from './routes/authRoutes.js';
 import systemRoutes from './routes/systemRoutes.js';
 
+import sensorRoutes from './routes/sensorRoutes.js';
 import zoneRoutes from './routes/zoneRoutes.js';
 import stateRoutes from './routes/stateRoutes.js';
 import districtRoutes from './routes/districtRoutes.js';
@@ -66,7 +67,7 @@ app.get('/', (req, res) => {
 app.use("/api", authRoutes);
 app.use("/api/constants", systemRoutes);
 
-
+app.use("/api/sensor", sensorRoutes);
 app.use("/api/zones", zoneRoutes);
 app.use("/api/states", stateRoutes);
 app.use("/api/districts", districtRoutes);
