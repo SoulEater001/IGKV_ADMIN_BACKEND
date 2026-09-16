@@ -1,4 +1,3 @@
-import { pool } from "../config/db.js";
 
 export const invalidateUserTokens = async (connection, userId) => {
     await connection.query(

@@ -2,7 +2,7 @@ export const ENTITIES = Object.freeze({
     USER: "ADMIN_USER",
     ROLE: "ROLE",
     PERMISSION: "PERMISSION",
-
+    ROLE_MANAGEMENT: "ROLE_MANAGEMENT",
     ZONE: "ZONE",
     STATE: "STATE",
     DISTRICT: "DISTRICT",

@@ -11,6 +11,8 @@ import initWS from "./websocket/wsServer.js";
 import { initMQTT } from "./middleware/mqttClient.js";
 
 import authRoutes from './routes/authRoutes.js';
+import systemRoutes from './routes/systemRoutes.js';
+
 import zoneRoutes from './routes/zoneRoutes.js';
 import stateRoutes from './routes/stateRoutes.js';
 import districtRoutes from './routes/districtRoutes.js';
@@ -24,6 +26,7 @@ import cropRangeRoutes from './routes/cropRangeRoutes.js';
 import sensorAlertRoutes from './routes/sensorAlertRoutes.js';
 import adminUsersRoutes from './routes/adminUsersRoutes.js';
 import rolesRoutes from './routes/rolesRoutes.js';
+import roleManagementRoutes from './routes/roleManagementRoutes.js';
 import permissionRoutes from './routes/permissionRoutes.js';
 import dashRoutes from './routes/dashRoutes.js';
 import approvalRoutes from './routes/approvalRoutes.js';
@@ -61,6 +64,9 @@ app.get('/', (req, res) => {
 });
 
 app.use("/api", authRoutes);
+app.use("/api/constants", systemRoutes);
+
+
 app.use("/api/zones", zoneRoutes);
 app.use("/api/states", stateRoutes);
 app.use("/api/districts", districtRoutes);
@@ -72,12 +78,16 @@ app.use("/api/crops", cropRoutes);
 app.use("/api/crop-stages", cropStageRoutes);
 app.use("/api/crop-ranges", cropRangeRoutes);
 app.use("/api/sensor-alerts", sensorAlertRoutes);
+
 app.use("/api/users", adminUsersRoutes);
 app.use("/api/roles", rolesRoutes);
+app.use("/api/role-management", roleManagementRoutes);
 app.use("/api/permissions", permissionRoutes);
+
 app.use("/api/dashboard", dashRoutes);
 app.use("/api/approval", approvalRoutes);
 app.use("/api/activity-logs", activityRoutes);
+
 app.use("/api/weather/stations", weatherStationRoutes);
 app.use("/api/weather/observations", weatherObservationRoutes);
 app.use("/api/weather/forecasts", weatherForecastRoutes);

@@ -81,6 +81,10 @@ import {
     executeDeleteBlock
 } from "./blockService.js";
 
+import {
+    executeUpdateRoleManagement
+} from "./roleManagementService.js";
+
 import { ACTIONS } from '../constant/activityActions.js';
 import { ENTITIES } from '../constant/activityEntities.js'
 
@@ -120,6 +124,13 @@ export const executeApprovedRequest = async (
             return await executeDeleteRole(
                 connection,
                 payload.id
+            );
+
+        case `${ENTITIES.ROLE_MANAGEMENT}:${ACTIONS.UPDATE}`:
+            return await executeUpdateRoleManagement(
+                connection,
+                payload,
+                request.requested_by
             );
 
         case `${ENTITIES.PERMISSION}:${ACTIONS.CREATE}`:

@@ -12,6 +12,7 @@ export const PERMISSION_ACTION_LIST = Object.freeze(
 export const PERMISSION_RESOURCES = Object.freeze({
     USERS: "users",
     ROLES: "roles",
+    ROLE_MANAGEMENT: "role-management",
     PERMISSIONS: "permissions",
     APPROVALS: "approvals",
     ACTIVITY_LOGS: "activity-logs",

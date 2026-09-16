@@ -17,16 +17,22 @@ export const executeCreateRole = async (connection, data) => {
 
     const [result] = await connection.query(
         `
-        INSERT INTO roles
-        (
-            name,
-            description
-        )
-        VALUES (?, ?)
-        `,
+    INSERT INTO roles
+    (
+        name,
+        description,
+        requires_approval,
+        is_system,
+        is_active
+    )
+    VALUES (?, ?, ?, ?, ?)
+    `,
         [
             data.name,
-            data.description ?? null
+            data.description ?? null,
+            data.requires_approval,
+            data.is_system,
+            data.is_active
         ]
     );
 
@@ -77,15 +83,19 @@ export const executeUpdateRole = async (
 
     await connection.query(
         `
-        UPDATE roles
-        SET
-            name = ?,
-            description = ?
-        WHERE id = ?
-        `,
+    UPDATE roles
+    SET
+        name = ?,
+        description = ?,
+        requires_approval = ?,
+        is_active = ?
+    WHERE id = ?
+    `,
         [
             roleData.name,
             roleData.description,
+            roleData.requires_approval,
+            roleData.is_active,
             roleData.id
         ]
     );

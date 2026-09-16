@@ -60,7 +60,37 @@ export const createRole = async (req, res) => {
         const {
             name,
             description,
+            requires_approval = 1,
+            is_system = 0,
+            is_active = 1
         } = req.body;
+
+        if (![0, 1].includes(Number(requires_approval))) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "requires_approval must be 0 or 1."
+            });
+        }
+
+        if (![0, 1].includes(Number(is_active))) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "is_active must be 0 or 1."
+            });
+        }
+
+        if (![0, 1].includes(Number(is_system))) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "is_system must be 0 or 1."
+            });
+        }
 
         if (!name?.trim()) {
             await connection.rollback();
@@ -91,6 +121,9 @@ export const createRole = async (req, res) => {
         const roleData = {
             name: normalizedName.trim(),
             description: description?.trim() || null,
+            requires_approval: Number(requires_approval),
+            is_system: Number(is_system),
+            is_active: Number(is_active)
         };
 
         if (await requiresApproval(req.user)) {
@@ -200,8 +233,37 @@ export const updateRole = async (req, res) => {
         const {
             name,
             description,
+            requires_approval,
+            is_active,
             permissionIds = []
         } = req.body;
+
+        if (![0, 1].includes(Number(requires_approval))) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "requires_approval must be 0 or 1."
+            });
+        }
+
+        if (![0, 1].includes(Number(is_active))) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "is_active must be 0 or 1."
+            });
+        }
+
+        if (![0, 1].includes(Number(is_system))) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "is_system must be 0 or 1."
+            });
+        }
 
         if (!Array.isArray(permissionIds)) {
             await connection.rollback();
@@ -314,6 +376,8 @@ export const updateRole = async (req, res) => {
             id: roleId,
             name: normalizedName,
             description: description?.trim() || null,
+            requires_approval: Number(requires_approval),
+            is_active: Number(is_active),
             permissionIds: normalizedPermissionIds
         };
 
