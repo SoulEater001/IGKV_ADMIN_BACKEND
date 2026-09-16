@@ -345,7 +345,7 @@ export const createDistrict = async (req, res) => {
             district_lg_code
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -523,7 +523,7 @@ export const updateDistrict = async (req, res) => {
             district_lg_code
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -701,7 +701,7 @@ export const deleteDistrict = async (req, res) => {
             id: district.district_id,
             name: district.name
         }
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,

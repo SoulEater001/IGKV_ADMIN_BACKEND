@@ -116,6 +116,7 @@ export const getCrops = async (req, res) => {
 
         let query = `
             SELECT
+                c.id,
                 c.imd_crop_id,
                 c.imd_crop_name,
                 c.imd_crop_name_h,
@@ -199,7 +200,7 @@ export const createCrop = async (req, res) => {
             });
         }
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -360,7 +361,7 @@ export const updateCrop = async (req, res) => {
 
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -489,7 +490,7 @@ export const deleteCrop = async (req, res) => {
             imd_crop_name: crop.imd_crop_name
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,

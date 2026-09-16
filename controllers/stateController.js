@@ -291,7 +291,7 @@ export const createState = async (req, res) => {
             state_lg_code
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -461,7 +461,7 @@ export const updateState = async (req, res) => {
             state_lg_code
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -634,7 +634,7 @@ export const deleteState = async (req, res) => {
             state_lg_code: state.state_lg_code
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,

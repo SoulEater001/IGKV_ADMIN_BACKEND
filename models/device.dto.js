@@ -14,6 +14,7 @@ class DeviceDTO {
     this.longitude = row.longitude;
     this.lastGpsUpdated = row.last_gps_updated;
     this.intervalMs = row.interval_ms;
+    this.connectionType = row.connection_type;
   }
 }
 

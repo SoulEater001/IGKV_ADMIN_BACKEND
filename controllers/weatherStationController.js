@@ -5,21 +5,22 @@ export const getWeatherStations = async (req, res) => {
         const { is_active } = req.query;
 
         const conditions = [];
-    const params = [];
+        const params = [];
 
-    if (is_active !== undefined) {
-      conditions.push("ws.is_active = ?");
-      params.push(is_active === "true" ? 1 : 0);
-    }
+        if (is_active !== undefined) {
+            conditions.push("ws.is_active = ?");
+            params.push(is_active === "true" ? 1 : 0);
+        }
 
-    const whereClause = conditions.length
-      ? `WHERE ${conditions.join(" AND ")}`
-      : "";
+        const whereClause = conditions.length
+            ? `WHERE ${conditions.join(" AND ")}`
+            : "";
 
         const [rows] = await pool.query(`
             SELECT
                 ws.id,
                 ws.station_name,
+                ws.station_name_h,
                 ws.station_code,
                 ws.state_lg_code,
                 ws.district_lg_code,
@@ -27,21 +28,39 @@ export const getWeatherStations = async (req, res) => {
                 ws.is_active,
 
                 s.name AS state_name,
+                sl.name AS state_name_h,
+
                 d.name AS district_name,
-                b.name AS block_name
+                dl.name AS district_name_h,
+
+                b.name AS block_name,
+                bl.name AS block_name_h
 
             FROM weather_station ws
 
             LEFT JOIN m_state s
                 ON s.state_lg_code = ws.state_lg_code
 
+            LEFT JOIN m_state_language sl
+                ON sl.state_id = s.state_id
+                AND sl.language_id = 1
+
             LEFT JOIN m_district d
                 ON d.district_lg_code = ws.district_lg_code
+
+            LEFT JOIN m_district_language dl
+                ON dl.district_id = d.district_id
+                AND dl.language_id = 1
 
             LEFT JOIN m_block b
                 ON b.block_lg_code = ws.block_lg_code
 
-             ${whereClause}
+            LEFT JOIN m_block_language bl
+                ON bl.block_id = b.block_id
+                AND bl.language_id = 1
+
+            ${whereClause}
+
             ORDER BY ws.station_name ASC
         `, params);
 
@@ -88,7 +107,7 @@ export const getWeatherStationsPaginated = async (req, res) => {
 
         const isActive =
             req.query.is_active !== undefined &&
-            req.query.is_active !== ''
+                req.query.is_active !== ''
                 ? Number(req.query.is_active)
                 : null;
 
@@ -101,18 +120,29 @@ export const getWeatherStationsPaginated = async (req, res) => {
 
         if (search) {
             where.push(`
-                (
-                    ws.station_name LIKE ?
-                    OR ws.station_code LIKE ?
-                    OR s.name LIKE ?
-                    OR d.name LIKE ?
-                    OR b.name LIKE ?
-                )
-            `);
+        (
+            ws.station_name LIKE ?
+            OR ws.station_name_h LIKE ?
+            OR ws.station_code LIKE ?
+
+            OR s.name LIKE ?
+            OR sl.name LIKE ?
+
+            OR d.name LIKE ?
+            OR dl.name LIKE ?
+
+            OR b.name LIKE ?
+            OR bl.name LIKE ?
+        )
+    `);
 
             const searchValue = `%${search}%`;
 
             params.push(
+                searchValue,
+                searchValue,
+                searchValue,
+                searchValue,
                 searchValue,
                 searchValue,
                 searchValue,
@@ -159,20 +189,32 @@ export const getWeatherStationsPaginated = async (req, res) => {
 
         const [countRows] = await pool.query(
             `
-            SELECT COUNT(*) AS total
-            FROM weather_station ws
+    SELECT COUNT(*) AS total
+    FROM weather_station ws
 
-            LEFT JOIN m_state s
-                ON s.state_lg_code = ws.state_lg_code
+    LEFT JOIN m_state s
+        ON s.state_lg_code = ws.state_lg_code
 
-            LEFT JOIN m_district d
-                ON d.district_lg_code = ws.district_lg_code
+    LEFT JOIN m_state_language sl
+        ON sl.state_id = s.state_id
+        AND sl.language_id = 1
 
-            LEFT JOIN m_block b
-                ON b.block_lg_code = ws.block_lg_code
+    LEFT JOIN m_district d
+        ON d.district_lg_code = ws.district_lg_code
 
-            ${whereClause}
-            `,
+    LEFT JOIN m_district_language dl
+        ON dl.district_id = d.district_id
+        AND dl.language_id = 1
+
+    LEFT JOIN m_block b
+        ON b.block_lg_code = ws.block_lg_code
+
+    LEFT JOIN m_block_language bl
+        ON bl.block_id = b.block_id
+        AND bl.language_id = 1
+
+    ${whereClause}
+    `,
             params
         );
 
@@ -184,36 +226,54 @@ export const getWeatherStationsPaginated = async (req, res) => {
 
         const [rows] = await pool.query(
             `
-            SELECT
-                ws.id,
-                ws.station_name,
-                ws.station_code,
-                ws.state_lg_code,
-                ws.district_lg_code,
-                ws.block_lg_code,
-                ws.is_active,
+    SELECT
+        ws.id,
+        ws.station_name,
+        ws.station_name_h,
+        ws.station_code,
+        ws.state_lg_code,
+        ws.district_lg_code,
+        ws.block_lg_code,
+        ws.is_active,
 
-                s.name AS state_name,
-                d.name AS district_name,
-                b.name AS block_name
+        s.name AS state_name,
+        sl.name AS state_name_h,
 
-            FROM weather_station ws
+        d.name AS district_name,
+        dl.name AS district_name_h,
 
-            LEFT JOIN m_state s
-                ON s.state_lg_code = ws.state_lg_code
+        b.name AS block_name,
+        bl.name AS block_name_h
 
-            LEFT JOIN m_district d
-                ON d.district_lg_code = ws.district_lg_code
+    FROM weather_station ws
 
-            LEFT JOIN m_block b
-                ON b.block_lg_code = ws.block_lg_code
+    LEFT JOIN m_state s
+        ON s.state_lg_code = ws.state_lg_code
 
-            ${whereClause}
+    LEFT JOIN m_state_language sl
+        ON sl.state_id = s.state_id
+        AND sl.language_id = 1
 
-            ORDER BY ws.station_name ASC
+    LEFT JOIN m_district d
+        ON d.district_lg_code = ws.district_lg_code
 
-            LIMIT ? OFFSET ?
-            `,
+    LEFT JOIN m_district_language dl
+        ON dl.district_id = d.district_id
+        AND dl.language_id = 1
+
+    LEFT JOIN m_block b
+        ON b.block_lg_code = ws.block_lg_code
+
+    LEFT JOIN m_block_language bl
+        ON bl.block_id = b.block_id
+        AND bl.language_id = 1
+
+    ${whereClause}
+
+    ORDER BY ws.station_name ASC
+
+    LIMIT ? OFFSET ?
+    `,
             [...params, limit, offset]
         );
 
@@ -248,6 +308,7 @@ export const createWeatherStation = async (req, res) => {
     try {
         const {
             station_name,
+            station_name_h,
             station_code,
             state_lg_code,
             district_lg_code,
@@ -258,7 +319,7 @@ export const createWeatherStation = async (req, res) => {
         // Validation
         // -----------------------------
 
-        if (!station_name?.trim()) {
+        if (!station_name?.trim() && !station_name_h?.trim()) {
             return res.status(400).json({
                 success: false,
                 message: "Station name is required"
@@ -303,6 +364,7 @@ export const createWeatherStation = async (req, res) => {
             `
             INSERT INTO weather_station (
                 station_name,
+                station_name_h,
                 station_code,
                 state_lg_code,
                 district_lg_code,
@@ -312,6 +374,7 @@ export const createWeatherStation = async (req, res) => {
             `,
             [
                 station_name.trim(),
+                station_name_h.trim(),
                 station_code?.trim() || null,
                 state_lg_code,
                 district_lg_code ?? null,
@@ -352,6 +415,7 @@ export const updateWeatherStation = async (req, res) => {
 
         const {
             station_name,
+            station_name_h,
             station_code,
             state_lg_code,
             district_lg_code,
@@ -373,7 +437,7 @@ export const updateWeatherStation = async (req, res) => {
         // Validation
         // -----------------------------
 
-        if (!station_name?.trim()) {
+        if (!station_name?.trim() && !station_name_h?.trim()) {
             return res.status(400).json({
                 success: false,
                 message: "Station name is required"
@@ -444,6 +508,7 @@ export const updateWeatherStation = async (req, res) => {
             UPDATE weather_station
             SET
                 station_name = ?,
+                station_name_h = ?,
                 station_code = ?,
                 state_lg_code = ?,
                 district_lg_code = ?,
@@ -452,6 +517,7 @@ export const updateWeatherStation = async (req, res) => {
             `,
             [
                 station_name.trim(),
+                station_name_h.trim(),
                 station_code?.trim() || null,
                 state_lg_code,
                 district_lg_code ?? null,

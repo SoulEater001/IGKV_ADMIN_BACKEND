@@ -3,7 +3,7 @@ import redis from "../config/redis.js";
 const CACHE_PREFIX = "iot:device:";
 
 export const OFFLINE_THRESHOLD = 30 * 1000;
-export const SNAPSHOT_INTERVAL = 12 * 60 * 60 * 1000;
+export const SNAPSHOT_INTERVAL = 1 * 60 * 60 * 1000;   //Hour
 
 function getDeviceCacheKey(deviceId) {
     return `${CACHE_PREFIX}${deviceId}`;

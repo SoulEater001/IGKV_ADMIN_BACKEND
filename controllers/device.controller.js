@@ -21,6 +21,41 @@ async function getAllDevices(req, res) {
   }
 }
 
+const getDevicesPaginated = async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+    const search = (req.query.search || '').trim();
+    const assignment = req.query.assignment || '';
+    const deviceType = req.query.deviceType || '';
+
+    const result = await deviceService.getDevicesPaginated(
+      page,
+      limit,
+      search,
+      assignment,
+      deviceType
+    );
+
+    const { rows, total } = result;
+
+    return res.json({
+      success: true,
+      data: rows,
+      total,
+      page,
+      limit
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch devices.'
+    });
+  }
+};
+
 async function getDeviceById(req, res) {
   try {
     // console.log("req reached")
@@ -33,19 +68,19 @@ async function getDeviceById(req, res) {
   }
 }
 
-async function getDevicesByMobileNo(req, res) {
-  try {
-    const { mobileNo } = req.params;
+// async function getDevicesByMobileNo(req, res) {
+//   try {
+//     const { mobileNo } = req.params;
 
-    const data = await deviceService.getDevicesByMobileNo(mobileNo);
+//     const data = await deviceService.getDevicesByMobileNo(mobileNo);
 
-    res
-      .status(200)
-      .json(new ApiResponse(data, "User devices fetched", 200, true));
-  } catch (err) {
-    res.status(500).json(new ApiResponse(null, err.message, 500, false));
-  }
-}
+//     res
+//       .status(200)
+//       .json(new ApiResponse(data, "User devices fetched", 200, true));
+//   } catch (err) {
+//     res.status(500).json(new ApiResponse(null, err.message, 500, false));
+//   }
+// }
 
 async function updateDevice(req, res) {
   try {
@@ -60,10 +95,23 @@ async function updateDevice(req, res) {
 async function deleteDevice(req, res) {
   try {
     const deviceId = req.params.deviceId;
-    await deviceService.deleteDevice(deviceId);
-    res.status(200).json(new ApiResponse(null, "Device deleted", 200, true));
+    const deletedBy = req.user.id;
+
+    const data = await deviceService.deleteDevice(
+      deviceId,
+      deletedBy
+    );
+
+    return res
+      .status(200)
+      .json(new ApiResponse(data, "Device deleted", 200, true));
   } catch (err) {
-    res.status(500).json(new ApiResponse(null, err.message, 500, false));
+    const statusCode =
+      err.message === "Device not found" ? 404 : 500;
+
+    return res
+      .status(statusCode)
+      .json(new ApiResponse(null, err.message, statusCode, false));
   }
 }
 
@@ -88,24 +136,6 @@ async function getDashboardSummary(req, res) {
     res
       .status(200)
       .json(new ApiResponse(data, "Dashboard summary fetched", 200, true));
-  } catch (err) {
-    res.status(500).json(new ApiResponse(null, err.message, 500, false));
-  }
-}
-
-async function filterDevices(req, res) {
-  try {
-    const { assignment, connectionType, search } = req.query;
-
-    const data = await deviceService.filterDevices({
-      assignment,
-      connectionType,
-      search,
-    });
-
-    res
-      .status(200)
-      .json(new ApiResponse(data, "Filtered devices fetched", 200, true));
   } catch (err) {
     res.status(500).json(new ApiResponse(null, err.message, 500, false));
   }
@@ -234,46 +264,46 @@ async function exportSensorHistoryCSV(req, res) {
   }
 }
 
-async function getUserDeviceSummary(req, res) {
-  try {
-    const { mobileNo } = req.params;
+// async function getUserDeviceSummary(req, res) {
+//   try {
+//     const { mobileNo } = req.params;
 
-    const data = await deviceService.getUserDeviceSummary(mobileNo);
+//     const data = await deviceService.getUserDeviceSummary(mobileNo);
 
-    res
-      .status(200)
-      .json(new ApiResponse(data, "User device summary fetched", 200, true));
-  } catch (err) {
-    res.status(500).json(new ApiResponse(null, err.message, 500, false));
-  }
-}
+//     res
+//       .status(200)
+//       .json(new ApiResponse(data, "User device summary fetched", 200, true));
+//   } catch (err) {
+//     res.status(500).json(new ApiResponse(null, err.message, 500, false));
+//   }
+// }
 
-async function getReadyDevices(req, res) {
-  try {
-    const { mobileNo } = req.params;
+// async function getReadyDevices(req, res) {
+//   try {
+//     const { mobileNo } = req.params;
 
-    const data = await deviceService.getReadyDevicesByMobileNo(mobileNo);
+//     const data = await deviceService.getReadyDevicesByMobileNo(mobileNo);
 
-    res
-      .status(200)
-      .json(new ApiResponse(data, "Ready devices fetched", 200, true));
-  } catch (err) {
-    res.status(500).json(new ApiResponse(null, err.message, 500, false));
-  }
-}
+//     res
+//       .status(200)
+//       .json(new ApiResponse(data, "Ready devices fetched", 200, true));
+//   } catch (err) {
+//     res.status(500).json(new ApiResponse(null, err.message, 500, false));
+//   }
+// }
 
 export {
   createDevice,
   getAllDevices,
+  getDevicesPaginated,
   getDeviceById,
   updateDevice,
   deleteDevice,
   assignDeviceToUser,
   getDashboardSummary,
-  filterDevices,
   getSensorHistory,
   exportSensorHistoryCSV,
-  getDevicesByMobileNo,
-  getUserDeviceSummary,
-  getReadyDevices,
+  // getDevicesByMobileNo,
+  // getUserDeviceSummary,
+  // getReadyDevices,
 };

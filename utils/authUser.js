@@ -22,6 +22,7 @@ export const getAuthenticatedUser = async (connection, userId) => {
 
         LEFT JOIN roles r
             ON ur.role_id = r.id
+            AND r.is_active = 1
 
         WHERE u.id = ?
         `,
@@ -49,6 +50,10 @@ export const getAuthenticatedUser = async (connection, userId) => {
             p.action
 
         FROM user_roles ur
+
+        JOIN roles r 
+            ON ur.role_id = r.id 
+            AND r.is_active = 1
 
         JOIN role_permissions rp
             ON ur.role_id = rp.role_id

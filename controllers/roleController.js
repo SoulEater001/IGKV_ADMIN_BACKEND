@@ -3,10 +3,8 @@ import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
-import { ROLES } from "../constant/index.js";
 import { executeCreateRole, executeDeleteRole, executeUpdateRole } from '../services/roleService.js'
-import { requiresApproval, canManageRole, isSystemRole } from '../utils/approval.js'
-import { invalidateRoleUsers, invalidateUserTokens } from '../utils/token.js'
+import { requiresApproval, canManageRole } from '../utils/approval.js'
 
 export const getRoles = async (req, res) => {
     try {
@@ -16,7 +14,9 @@ export const getRoles = async (req, res) => {
                 r.id,
                 r.name,
                 r.description,
-
+            r.requires_approval,
+            r.is_system,
+            r.is_active,
                 COUNT(rp.permission_id) AS permission_count
 
             FROM roles r
@@ -27,7 +27,10 @@ export const getRoles = async (req, res) => {
             GROUP BY
                 r.id,
                 r.name,
-                r.description
+                r.description,
+                r.requires_approval,
+                r.is_system,
+                r.is_active
 
             ORDER BY r.name ASC
         `);
@@ -56,7 +59,7 @@ export const createRole = async (req, res) => {
         await connection.beginTransaction();
         const {
             name,
-            description
+            description,
         } = req.body;
 
         if (!name?.trim()) {
@@ -66,6 +69,7 @@ export const createRole = async (req, res) => {
                 message: "Role name is required."
             });
         }
+        const normalizedName = name.trim().toUpperCase();
 
         const [[existing]] = await connection.query(
             `
@@ -73,7 +77,7 @@ export const createRole = async (req, res) => {
             FROM roles
             WHERE name = ?
             `,
-            [name.trim()]
+            [normalizedName.trim()]
         );
 
         if (existing) {
@@ -85,21 +89,11 @@ export const createRole = async (req, res) => {
         }
 
         const roleData = {
-            name: name.trim(),
-            description: description?.trim() || null
+            name: normalizedName.trim(),
+            description: description?.trim() || null,
         };
 
-        if (!canManageRole(req.user, roleData.name)) {
-
-            await connection.rollback();
-
-            return res.status(403).json({
-                success: false,
-                message: "You are not allowed to create a Super Admin role."
-            });
-
-        }
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(req.user)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -134,7 +128,7 @@ export const createRole = async (req, res) => {
                 userId: req.user.id,
                 action: ACTIONS.CREATE,
                 entity: ENTITIES.ROLE,
-                entityId: req.user.id,
+                entityId: null,
                 description: `${req.user.name} requested creation of user ${roleData.name}`,
                 ipAddress: req.ip
             });
@@ -146,8 +140,6 @@ export const createRole = async (req, res) => {
             });
 
         } else {
-
-
 
             const roleId = await executeCreateRole(
                 connection,
@@ -194,12 +186,37 @@ export const updateRole = async (req, res) => {
     try {
         await connection.beginTransaction();
         const { id } = req.params;
+        const roleId = Number(id);
+
+        if (!Number.isInteger(roleId) || roleId <= 0) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid role ID."
+            });
+        }
 
         const {
             name,
             description,
             permissionIds = []
         } = req.body;
+
+        if (!Array.isArray(permissionIds)) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Permission IDs must be an array."
+            });
+        }
+
+        const normalizedPermissionIds = [
+            ...new Set(
+                permissionIds.map(Number)
+            )
+        ];
 
         const normalizedName = name?.trim().toUpperCase();
 
@@ -211,24 +228,17 @@ export const updateRole = async (req, res) => {
             });
         }
 
-        if (!canManageRole(req.user, normalizedName)) {
-
-            await connection.rollback();
-
-            return res.status(403).json({
-                success: false,
-                message: `You cannot assign the role name ${normalizedName}.`
-            });
-
-        }
-
         const [[role]] = await connection.query(
             `
-            SELECT id, name
-            FROM roles
-            WHERE id = ?
-            `,
-            [id]
+    SELECT
+        id,
+        name,
+        is_system,
+        is_active
+    FROM roles
+    WHERE id = ?
+    `,
+            [roleId]
         );
 
         if (!role) {
@@ -239,15 +249,19 @@ export const updateRole = async (req, res) => {
             });
         }
 
-        if (!canManageRole(req.user, role.name)) {
+        const allowed = await canManageRole(
+            connection,
+            req.user.id,
+            role.id
+        );
 
+        if (!allowed) {
             await connection.rollback();
 
             return res.status(403).json({
                 success: false,
                 message: `You cannot modify the ${role.name} role.`
             });
-
         }
 
         const [[existing]] = await connection.query(
@@ -259,7 +273,7 @@ export const updateRole = async (req, res) => {
             `,
             [
                 normalizedName.trim(),
-                id
+                roleId
             ]
         );
 
@@ -271,7 +285,7 @@ export const updateRole = async (req, res) => {
             });
         }
 
-        if (permissionIds.length > 0) {
+        if (normalizedPermissionIds.length > 0) {
 
             const [validPermissions] = await connection.query(
                 `
@@ -279,7 +293,7 @@ export const updateRole = async (req, res) => {
                 FROM permissions
                 WHERE id IN (?)
                 `,
-                [permissionIds]
+                [normalizedPermissionIds]
             );
 
             if (validPermissions.length !== permissionIds.length) {
@@ -297,20 +311,20 @@ export const updateRole = async (req, res) => {
 
 
         const roleData = {
-            id: Number(id),
+            id: roleId,
             name: normalizedName,
             description: description?.trim() || null,
-            permissionIds
+            permissionIds: normalizedPermissionIds
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.ROLE,
                 ACTIONS.UPDATE,
                 {
-                    id: Number(id)
+                    id: roleId
                 }
             );
 
@@ -328,7 +342,7 @@ export const updateRole = async (req, res) => {
             await createApprovalRequest(connection, {
                 resource: ENTITIES.ROLE,
                 action: ACTIONS.UPDATE,
-                recordId: Number(id),
+                recordId: roleId,
                 payload: roleData,
                 requestedBy: req.user.id
             });
@@ -339,7 +353,7 @@ export const updateRole = async (req, res) => {
                 userId: req.user.id,
                 action: ACTIONS.UPDATE,
                 entity: ENTITIES.ROLE,
-                entityId: Number(id),
+                entityId: roleId,
                 description: `${req.user.name} requested update of role ${normalizedName}`,
                 ipAddress: req.ip
             });
@@ -356,12 +370,13 @@ export const updateRole = async (req, res) => {
                 connection,
                 roleData
             );
+            await connection.commit();
 
             await logActivity({
                 userId: req.user.id,
                 action: ACTIONS.UPDATE,
                 entity: ENTITIES.ROLE,
-                entityId: Number(id),
+                entityId: roleId,
                 description: `${req.user.name} updated role ${normalizedName.trim()}`,
                 ipAddress: req.ip
             });
@@ -385,23 +400,64 @@ export const updateRole = async (req, res) => {
 
 export const deleteRole = async (req, res) => {
     const connection = await pool.getConnection();
-    try {
 
-        const { id } = req.params;
+    try {
         await connection.beginTransaction();
+
+        const roleId = Number(req.params.id);
+
+        if (!Number.isInteger(roleId) || roleId <= 0) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid role ID."
+            });
+        }
+
         const [[role]] = await connection.query(
             `
-            SELECT id, name
+            SELECT
+                id,
+                name,
+                is_system,
+                is_active
             FROM roles
             WHERE id = ?
             `,
-            [id]
+            [roleId]
         );
 
         if (!role) {
+            await connection.rollback();
+
             return res.status(404).json({
                 success: false,
                 message: "Role not found."
+            });
+        }
+
+        if (role.is_system) {
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: `The ${role.name} role is a system role and cannot be deleted.`
+            });
+        }
+
+        const allowed = await canManageRole(
+            connection,
+            req.user.id,
+            role.id
+        );
+
+        if (!allowed) {
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: `You cannot delete the ${role.name} role.`
             });
         }
 
@@ -410,18 +466,7 @@ export const deleteRole = async (req, res) => {
             name: role.name
         };
 
-        if (!canManageRole(req.user, role.name)) {
-
-            await connection.rollback();
-
-            return res.status(403).json({
-                success: false,
-                message: `You cannot delete the ${role.name} role.`
-            });
-
-        }
-
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -433,15 +478,14 @@ export const deleteRole = async (req, res) => {
             );
 
             if (pending) {
-
                 await connection.rollback();
 
                 return res.status(409).json({
                     success: false,
                     message: "A delete request for this role is already pending."
                 });
-
             }
+
             await createApprovalRequest(connection, {
                 resource: ENTITIES.ROLE,
                 action: ACTIONS.DELETE,
@@ -452,47 +496,55 @@ export const deleteRole = async (req, res) => {
 
             await connection.commit();
 
-            return res.status(200).json({
-                success: true,
-                approvalRequired: true,
-                message: "Role deletion request sent for approval."
-            });
-        } else {
-
-            const deletedRoleId = await executeDeleteRole(
-                connection,
-                role.id
-            );
-
-            await connection.commit();
-
             await logActivity({
                 userId: req.user.id,
                 action: ACTIONS.DELETE,
                 entity: ENTITIES.ROLE,
-                entityId: deletedRoleId,
-                description: `${req.user.name} deleted role ${role.name}`,
+                entityId: role.id,
+                description: `${req.user.name} requested deletion of role ${role.name}`,
                 ipAddress: req.ip
             });
 
             return res.status(200).json({
                 success: true,
-                message: "Role deleted successfully."
+                approvalRequired: true,
+                message: "Role deletion request sent for approval."
             });
         }
+
+        const deletedRoleId = await executeDeleteRole(
+            connection,
+            role.id
+        );
+
+        await connection.commit();
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.ROLE,
+            entityId: deletedRoleId,
+            description: `${req.user.name} deleted role ${role.name}`,
+            ipAddress: req.ip
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Role deleted successfully."
+        });
+
     } catch (error) {
+        await connection.rollback();
 
         console.error(error);
 
         return res.status(500).json({
             success: false,
-            message: "Failed to delete role."
+            message: error.message || "Failed to delete role."
         });
 
     } finally {
-
         connection.release();
-
     }
 };
 

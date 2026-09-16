@@ -17,6 +17,7 @@ export const getAdvisoriesPaginated = async (req, res) => {
             blockLgCode,
             categoryId,
             cropId,
+            cropStageId,
             advisoryTypeId,
             languageId,
             fromDate,
@@ -27,7 +28,6 @@ export const getAdvisoriesPaginated = async (req, res) => {
         } = req.query;
 
         if (fromDate && toDate) {
-
             const from = new Date(fromDate);
             const to = new Date(toDate);
 
@@ -44,7 +44,6 @@ export const getAdvisoriesPaginated = async (req, res) => {
                     message: "From date cannot be later than To date."
                 });
             }
-
         }
 
         if (!stateLgCode || !languageId) {
@@ -57,8 +56,9 @@ export const getAdvisoriesPaginated = async (req, res) => {
         const pageNumber = Number(page);
         const pageSize = Number(limit);
         const offset = (pageNumber - 1) * pageSize;
+
         const where = [
-            "d.language_id = ?",
+            "d.language_Id = ?",
         ];
 
         const params = [
@@ -80,7 +80,6 @@ export const getAdvisoriesPaginated = async (req, res) => {
             params.push(blockLgCode);
         }
 
-
         if (categoryId) {
             where.push("d.cat_id = ?");
             params.push(categoryId);
@@ -89,6 +88,11 @@ export const getAdvisoriesPaginated = async (req, res) => {
         if (cropId) {
             where.push("d.crop_id = ?");
             params.push(cropId);
+        }
+
+        if (cropStageId) {
+            where.push("d.crop_stage_id = ?");
+            params.push(cropStageId);
         }
 
         if (advisoryTypeId) {
@@ -111,34 +115,37 @@ export const getAdvisoriesPaginated = async (req, res) => {
         let searchSql = "";
 
         if (search?.trim()) {
-
             searchSql = `
-                AND (
-                    CAST(d.id AS CHAR) LIKE ?
-                    OR d.advisory LIKE ?
-                    OR c.img_category_name LIKE ?
-                    OR cr.imd_crop_name LIKE ?
-                    OR cr.imd_crop_name_h LIKE ?
-                    OR at.imd_advisory_type_name LIKE ?
-                    OR DATE_FORMAT(m.advisory_date, '%d-%m-%Y') LIKE ?
-                )
-            `;
+        AND (
+            LOWER(CAST(d.id AS CHAR)) LIKE LOWER(?)
+            OR LOWER(d.advisory) LIKE LOWER(?)
+            OR LOWER(c.img_category_name) LIKE LOWER(?)
+            OR LOWER(cr.imd_crop_name) LIKE LOWER(?)
+            OR LOWER(cr.imd_crop_name_h) LIKE LOWER(?)
+            OR LOWER(cs.stage_name) LIKE LOWER(?)
+            OR LOWER(cs.stage_name_h) LIKE LOWER(?)
+            OR LOWER(cs.stage_code) LIKE LOWER(?)
+            OR LOWER(at.imd_advisory_type_name) LIKE LOWER(?)
+            OR LOWER(DATE_FORMAT(m.advisory_date, '%d-%m-%Y')) LIKE LOWER(?)
+        )
+    `;
 
             const keyword = `%${search.trim()}%`;
 
             params.push(
-                keyword, // id
+                keyword, // advisory id
                 keyword, // advisory
                 keyword, // category
                 keyword, // crop english
                 keyword, // crop hindi
+                keyword, // crop stage english
+                keyword, // crop stage hindi
+                keyword, // crop stage code
                 keyword, // advisory type
                 keyword  // date
             );
-
         }
 
-        // Total records
         const [[countResult]] = await pool.query(
             `
             SELECT COUNT(*) AS total
@@ -150,11 +157,14 @@ export const getAdvisoriesPaginated = async (req, res) => {
             LEFT JOIN imd_m_category c
                 ON d.cat_id = c.imd_category_id
 
-            LEFT JOIN imd_advisory_type at
-                ON d.advisory_type_id = at.imd_advisory_type_id
-            
             LEFT JOIN imd_m_crop cr
                 ON d.crop_id = cr.imd_crop_id
+
+            LEFT JOIN crop_stages cs
+                ON d.crop_stage_id = cs.id
+
+            LEFT JOIN imd_advisory_type at
+                ON d.advisory_type_id = at.imd_advisory_type_id
 
             WHERE
                 ${whereSql}
@@ -163,13 +173,16 @@ export const getAdvisoriesPaginated = async (req, res) => {
             params
         );
 
-        // Fetch advisories
         const [rows] = await pool.query(
             `
             SELECT
                 d.id,
                 d.advisory,
-                d.language_id,
+                d.language_Id AS language_id,
+
+                d.state_lg_code,
+                d.district_lg_code,
+                d.block_lg_code,
 
                 c.imd_category_id,
                 c.img_category_name AS category,
@@ -177,6 +190,11 @@ export const getAdvisoriesPaginated = async (req, res) => {
                 cr.imd_crop_id,
                 cr.imd_crop_name,
                 cr.imd_crop_name_h,
+
+                cs.id AS crop_stage_id,
+                cs.stage_name AS crop_stage,
+                cs.stage_name_h AS crop_stage_h,
+                cs.stage_code AS crop_stage_code,
 
                 at.imd_advisory_type_id,
                 at.imd_advisory_type_name AS advisory_type,
@@ -191,18 +209,23 @@ export const getAdvisoriesPaginated = async (req, res) => {
 
             LEFT JOIN imd_m_category c
                 ON d.cat_id = c.imd_category_id
-            
+
             LEFT JOIN imd_m_crop cr
                 ON d.crop_id = cr.imd_crop_id
+
+            LEFT JOIN crop_stages cs
+                ON d.crop_stage_id = cs.id
 
             LEFT JOIN imd_advisory_type at
                 ON d.advisory_type_id = at.imd_advisory_type_id
 
-            WHERE 
-                ${whereSql} 
+            WHERE
+                ${whereSql}
                 ${searchSql}
 
-            ORDER BY m.advisory_date DESC, d.id DESC
+            ORDER BY
+                m.advisory_date DESC,
+                d.id DESC
 
             LIMIT ?
             OFFSET ?
@@ -218,7 +241,7 @@ export const getAdvisoriesPaginated = async (req, res) => {
             success: true,
             page: pageNumber,
             limit: pageSize,
-            total: countResult.total,
+            total: Number(countResult.total),
             totalPages: Math.ceil(countResult.total / pageSize),
             data: rows,
         });
@@ -855,8 +878,10 @@ export const createBulkAdvisories = async (req, res) => {
 
 export const updateAdvisory = async (req, res) => {
     const connection = await pool.getConnection();
+
     try {
         await connection.beginTransaction();
+
         const { id } = req.params;
 
         const {
@@ -865,6 +890,7 @@ export const updateAdvisory = async (req, res) => {
             block_lg_code,
             imd_category_id,
             crop_id,
+            crop_stage_id,
             imd_advisory_type_id,
             advisory,
             language_id
@@ -906,41 +932,39 @@ export const updateAdvisory = async (req, res) => {
         }
 
         if (crop_id) {
-
             const [[crop]] = await connection.query(
                 `
-        SELECT imd_crop_id
-        FROM imd_m_crop
-        WHERE
-            imd_crop_id = ?
-            AND imd_category_id = ?
-        `,
+                SELECT imd_crop_id
+                FROM imd_m_crop
+                WHERE
+                    imd_crop_id = ?
+                    AND imd_category_id = ?
+                `,
                 [crop_id, imd_category_id]
             );
 
             if (!crop) {
-
                 await connection.rollback();
 
                 return res.status(400).json({
                     success: false,
                     message: "Selected crop doesn't belong to category."
                 });
-
             }
         }
 
         const [[existing]] = await connection.query(
             `
-                SELECT id
-                FROM imd_advisory_detail
-                WHERE id = ?
-                `,
+            SELECT id
+            FROM imd_advisory_detail
+            WHERE id = ?
+            `,
             [id]
         );
 
         if (!existing) {
             await connection.rollback();
+
             return res.status(404).json({
                 success: false,
                 message: "Advisory not found."
@@ -956,6 +980,7 @@ export const updateAdvisory = async (req, res) => {
 
             imd_category_id: imd_category_id ?? null,
             crop_id: crop_id ?? null,
+            crop_stage_id: crop_stage_id ?? null,
 
             imd_advisory_type_id,
             language_id,
@@ -963,8 +988,7 @@ export const updateAdvisory = async (req, res) => {
             advisory: advisory.trim()
         };
 
-        if (requiresApproval(req.user)) {
-
+        if (await requiresApproval(connection, req.user.id)) {
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.ADVISORY,
@@ -975,14 +999,12 @@ export const updateAdvisory = async (req, res) => {
             );
 
             if (pending) {
-
                 await connection.rollback();
 
                 return res.status(409).json({
                     success: false,
                     message: "An advisory update request is already pending."
                 });
-
             }
 
             await createApprovalRequest(
@@ -1020,6 +1042,7 @@ export const updateAdvisory = async (req, res) => {
             );
 
             await connection.commit();
+
             await logActivity({
                 userId: req.user.id,
                 action: ACTIONS.UPDATE,
@@ -1029,16 +1052,18 @@ export const updateAdvisory = async (req, res) => {
                 ipAddress: req.ip
             });
 
-            res.json({
+            return res.json({
                 success: true,
                 message: "Advisory updated successfully."
             });
         }
-    } catch (error) {
 
+    } catch (error) {
         console.error(error);
+
         await connection.rollback();
-        res.status(500).json({
+
+        return res.status(500).json({
             success: false,
             message: error.message || "Failed to update advisory."
         });
@@ -1050,15 +1075,17 @@ export const updateAdvisory = async (req, res) => {
 
 export const createAdvisory = async (req, res) => {
     const connection = await pool.getConnection();
-    try {
 
+    try {
         await connection.beginTransaction();
+
         const {
             state_lg_code,
             district_lg_code,
             block_lg_code,
             imd_category_id,
             crop_id,
+            crop_stage_id,
             imd_advisory_type_id,
             language_id,
             advisory,
@@ -1072,6 +1099,7 @@ export const createAdvisory = async (req, res) => {
             advisory.trim() === ""
         ) {
             await connection.rollback();
+
             return res.status(400).json({
                 success: false,
                 message: "Please fill all required fields."
@@ -1084,6 +1112,7 @@ export const createAdvisory = async (req, res) => {
             block_lg_code
         )) {
             await connection.rollback();
+
             return res.status(400).json({
                 success: false,
                 message: "Invalid location hierarchy."
@@ -1092,6 +1121,7 @@ export const createAdvisory = async (req, res) => {
 
         if (!imd_category_id && crop_id) {
             await connection.rollback();
+
             return res.status(400).json({
                 success: false,
                 message: "Crop cannot be selected without category."
@@ -1099,46 +1129,43 @@ export const createAdvisory = async (req, res) => {
         }
 
         if (crop_id) {
-
             const [[crop]] = await connection.query(
                 `
-        SELECT imd_crop_id
-        FROM imd_m_crop
-        WHERE
-            imd_crop_id=?
-            AND imd_category_id=?
-        `,
+                SELECT imd_crop_id
+                FROM imd_m_crop
+                WHERE
+                    imd_crop_id = ?
+                    AND imd_category_id = ?
+                `,
                 [crop_id, imd_category_id]
             );
 
             if (!crop) {
+                await connection.rollback();
 
                 return res.status(400).json({
                     success: false,
                     message: "Selected crop doesn't belong to category."
                 });
-
             }
-
         }
 
         const advisoryData = {
             state_lg_code,
             district_lg_code: district_lg_code ?? null,
             block_lg_code: block_lg_code ?? null,
+
             imd_category_id: imd_category_id ?? null,
             crop_id: crop_id ?? null,
+            crop_stage_id: crop_stage_id ?? null,
+
             imd_advisory_type_id,
             language_id,
             advisory: advisory.trim(),
             advisory_date
         };
 
-        //
-        // Find today's advisory_main row.
-        // If none exists, create one.
-        //
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.ADVISORY,
@@ -1150,28 +1177,30 @@ export const createAdvisory = async (req, res) => {
                     block_lg_code,
                     imd_category_id,
                     crop_id,
+                    crop_stage_id,
                     imd_advisory_type_id,
                     language_id
                 }
             );
 
             if (pending) {
-
                 await connection.rollback();
 
                 return res.status(409).json({
                     success: false,
                     message: "A similar advisory creation request is already pending."
                 });
-
             }
 
-            await createApprovalRequest(connection, {
-                resource: ENTITIES.ADVISORY,
-                action: ACTIONS.CREATE,
-                payload: advisoryData,
-                requestedBy: req.user.id
-            });
+            await createApprovalRequest(
+                connection,
+                {
+                    resource: ENTITIES.ADVISORY,
+                    action: ACTIONS.CREATE,
+                    payload: advisoryData,
+                    requestedBy: req.user.id
+                }
+            );
 
             await connection.commit();
 
@@ -1207,18 +1236,22 @@ export const createAdvisory = async (req, res) => {
                 ipAddress: req.ip
             });
 
-            res.status(201).json({
+            return res.status(201).json({
                 success: true,
                 message: "Advisory created successfully."
             });
         }
+
     } catch (error) {
         console.error(error);
+
         await connection.rollback();
-        res.status(500).json({
+
+        return res.status(500).json({
             success: false,
             message: "Failed to create advisory."
         });
+
     } finally {
         connection.release();
     }
@@ -1255,7 +1288,7 @@ export const deleteAdvisory = async (req, res) => {
             advisory_main_id: advisory.advisory_main_id
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,

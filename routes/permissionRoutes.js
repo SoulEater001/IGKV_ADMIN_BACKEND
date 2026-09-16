@@ -7,15 +7,13 @@ import {
     getPermissionOptions,
     getPermissionsPaginated
 } from "../controllers/permissionController.js";
-import { authenticate, authorize, authorizePermissions } from "../middleware/authMiddleware.js";
+import { authenticate, authorizePermissions } from "../middleware/authMiddleware.js";
 import { PERMISSION_RESOURCES, PERMISSION_ACTIONS } from '../constant/index.js';
-import { ROLES } from '../constant/index.js';
-import { ROLE_GROUPS } from '../utils/approval.js';
 
 const router = express.Router();
 
 router.use(authenticate);
-router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL));
+
 
 router.get("/", 
     authorizePermissions(PERMISSION_RESOURCES.PERMISSIONS, PERMISSION_ACTIONS.READ),

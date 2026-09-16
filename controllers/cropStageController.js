@@ -256,7 +256,7 @@ export const createCropStage = async (req, res) => {
         }
 
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending =
                 await hasPendingApproval(
@@ -501,7 +501,7 @@ export const updateCropStage = async (req, res) => {
         };
 
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending =
                 await hasPendingApproval(
@@ -678,7 +678,7 @@ export const deleteCropStage = async (req, res) => {
 
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending =
                 await hasPendingApproval(

@@ -13,7 +13,8 @@ export const getCategories = async (req, res) => {
             SELECT
                 id,
                 imd_category_id,
-                img_category_name
+                img_category_name,
+                imd_category_name_h
             FROM imd_m_category
             ORDER BY id;
         `);
@@ -35,30 +36,100 @@ export const getCategories = async (req, res) => {
     }
 };
 
+export const getCategoriesPaginated = async (req, res) => {
+    try {
+
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+        const offset = (page - 1) * limit;
+        const search = (req.query.search || "").trim();
+
+        const searchParam = `%${search}%`;
+
+        const whereClause = search
+            ? `
+                WHERE
+                    CAST(id AS CHAR) LIKE ?
+                    OR img_category_name LIKE ?
+                    OR imd_category_name_h LIKE ?
+            `
+            : "";
+
+        const queryParams = search
+            ? [searchParam, searchParam, searchParam]
+            : [];
+
+        const [rows] = await pool.query(
+            `
+            SELECT
+                id,
+                imd_category_id,
+                img_category_name,
+                imd_category_name_h
+            FROM imd_m_category
+            ${whereClause}
+            ORDER BY id
+            LIMIT ? OFFSET ?
+            `,
+            [...queryParams, limit, offset]
+        );
+
+        const [[countResult]] = await pool.query(
+            `
+            SELECT COUNT(*) AS total
+            FROM imd_m_category
+            ${whereClause}
+            `,
+            queryParams
+        );
+
+        return res.json({
+            success: true,
+            data: rows,
+            total: countResult.total,
+            page,
+            limit
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch categories."
+        });
+
+    }
+};
+
 export const createCategory = async (req, res) => {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
-        const { img_category_name } = req.body;
+        const { img_category_name, imd_category_name_h } = req.body;
 
-        if (!img_category_name?.trim()) {
+        if (!img_category_name?.trim() || !imd_category_name_h?.trim()
+        ) {
             await connection.rollback();
+
             return res.status(400).json({
                 success: false,
-                message: "Category name is required."
+                message: "Category English and Hindi names are required."
             });
         }
 
         const categoryData = {
-            img_category_name: img_category_name.trim()
+            img_category_name: img_category_name.trim(),
+            imd_category_name_h: imd_category_name_h.trim()
         };
 
         const [[existing]] = await connection.query(
             `
-            SELECT id
-            FROM imd_m_category
-            WHERE img_category_name = ?
-            `,
+    SELECT id
+    FROM imd_m_category
+    WHERE img_category_name = ?
+    `,
             [categoryData.img_category_name]
         );
 
@@ -73,7 +144,7 @@ export const createCategory = async (req, res) => {
 
         }
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -163,13 +234,17 @@ export const updateCategory = async (req, res) => {
         await connection.beginTransaction();
 
         const { id } = req.params;
-        const { img_category_name } = req.body;
+        const {
+            img_category_name,
+            imd_category_name_h
+        } = req.body;
 
-        if (!img_category_name?.trim()) {
+        if (!img_category_name?.trim() || !imd_category_name_h?.trim()) {
             await connection.rollback();
+
             return res.status(400).json({
                 success: false,
-                message: "Category name is required."
+                message: "Category English and Hindi names are required."
             });
         }
 
@@ -213,10 +288,11 @@ export const updateCategory = async (req, res) => {
         }
         const categoryData = {
             id: Number(id),
-            img_category_name: img_category_name.trim()
-        }
+            img_category_name: img_category_name.trim(),
+            imd_category_name_h: imd_category_name_h.trim()
+        };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.CATEGORY,
@@ -355,7 +431,7 @@ export const deleteCategory = async (req, res) => {
             img_category_name: category.img_category_name
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,

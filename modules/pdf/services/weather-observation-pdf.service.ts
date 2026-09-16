@@ -208,106 +208,18 @@ export class WeatherObservationPdfService {
         weatherDataType: string
     ): Promise<string> {
 
-        const templateDirectory =
-            this.templateService.getTemplateDirectory(
-                reportType,
-                weatherDataType,
-                report.station
-            );
+        const template = await this.templateService.loadTemplate(
+            reportType,
+            weatherDataType,
+            report.station
+        );
 
-        const templateFiles =
-            resolveWeatherPdfTemplateFiles(
-                reportType,
-                weatherDataType
-            );
+        let logo = template.logo;
+        let govLogo = template.govLogo;
 
-        if (!templateFiles) {
-            throw new Error(
-                `No PDF template files configured for ${reportType} ${weatherDataType}`
-            );
-        }
+        let html = template.html;
 
-        const templatePath =
-            path.join(
-                templateDirectory,
-                templateFiles.html
-            );
-
-        const cssPath =
-            path.join(
-                templateDirectory,
-                templateFiles.css
-            );
-
-
-        const logoPath =
-            templateFiles.logo
-                ? path.join(
-                    templateDirectory,
-                    templateFiles.logo
-                )
-                : null;
-
-        const govLogoPath =
-            templateFiles.govLogo
-                ? path.join(
-                    templateDirectory,
-                    templateFiles.govLogo
-                )
-                : null;
-
-        const requiredFiles = [
-            templatePath,
-            cssPath,
-            ...(logoPath ? [logoPath] : [])
-        ];
-
-        for (const file of requiredFiles) {
-            try {
-                await fs.access(file);
-            } catch {
-                throw new Error(
-                    `PDF template file missing: ${file}`
-                );
-            }
-        }
-
-        let logo = '';
-        let govLogo = '';
-
-        if (logoPath) {
-            const logoBuffer =
-                await fs.readFile(logoPath);
-
-            logo =
-                `data:image/png;base64,${logoBuffer.toString('base64')}`;
-        }
-
-        if (govLogoPath) {
-            try {
-                await fs.access(govLogoPath);
-
-                const govLogoBuffer =
-                    await fs.readFile(govLogoPath);
-
-                govLogo =
-                    `data:image/png;base64,${govLogoBuffer.toString('base64')}`;
-            } catch {
-                govLogo = '';
-            }
-        }
-
-        let html =
-            await fs.readFile(
-                templatePath,
-                'utf-8'
-            );
-
-        const css =
-            await fs.readFile(
-                cssPath,
-                'utf-8'
-            );
+        const css = template.css;
 
         const observationRows =
             report.observations

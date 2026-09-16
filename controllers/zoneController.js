@@ -11,7 +11,8 @@ export const getZones = async (req, res) => {
         const [rows] = await pool.query(`
             SELECT
                 z.Zone_id,
-                zl.name,
+                en.name,
+                hi.name as zone_name_h,
                 z.Image_Path,
                 z.state_id,
                 s.name as state_name,
@@ -19,17 +20,22 @@ export const getZones = async (req, res) => {
 
             FROM m_zone z
 
-            JOIN m_zone_language zl
-                ON z.Zone_id = zl.zone_id
-               AND zl.language_id = 2
-               AND zl.deleted IS NULL
+            JOIN m_zone_language en
+                ON z.Zone_id = en.zone_id
+               AND en.language_id = 2
+               AND en.deleted IS NULL
+
+            LEFT JOIN m_zone_language hi
+                ON hi.zone_id = z.Zone_id
+               AND hi.language_id = 1
+               AND hi.deleted IS NULL
 
             LEFT JOIN m_state s
                 ON z.state_id = s.state_id
 
             WHERE z.deleted IS NULL
 
-            ORDER BY zl.name ASC
+            ORDER BY en.name ASC
         `);
 
         res.json({
@@ -148,7 +154,7 @@ export const createZone = async (req, res) => {
             imagePath
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -208,7 +214,7 @@ export const createZone = async (req, res) => {
                 userId: req.user.id,
                 action: ACTIONS.CREATE,
                 entity: ENTITIES.ZONE,
-                entityId: zoneId,
+                entityId: null,
                 description: `${req.user.name} created zone ${zoneData.name_en}`,
                 ipAddress: req.ip
             });
@@ -301,7 +307,7 @@ export const updateZone = async (req, res) => {
             imagePath
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -376,7 +382,7 @@ export const updateZone = async (req, res) => {
         await connection.rollback();
         return res.status(500).json({
             success: false,
-            message: error.message||"Failed to update zone."
+            message: error.message || "Failed to update zone."
         });
 
     } finally {
@@ -386,8 +392,10 @@ export const updateZone = async (req, res) => {
 
 export const deleteZone = async (req, res) => {
     const connection = await pool.getConnection();
+
     try {
         await connection.beginTransaction();
+
         const { id } = req.params;
 
         const [[zone]] = await connection.query(
@@ -397,57 +405,45 @@ export const deleteZone = async (req, res) => {
                 name
             FROM m_zone
             WHERE Zone_id = ?
-            AND deleted IS NULL
+              AND deleted IS NULL
             `,
             [id]
         );
 
         if (!zone) {
             await connection.rollback();
+
             return res.status(404).json({
                 success: false,
                 message: "Zone not found."
             });
         }
 
-        // Check if zone has districts
         const [[districts]] = await connection.query(
             `
             SELECT COUNT(*) AS total
             FROM m_district
             WHERE Zone_id = ?
-            AND deleted IS NULL
+              AND deleted IS NULL
             `,
             [id]
         );
 
         if (districts.total > 0) {
             await connection.rollback();
+
             return res.status(400).json({
                 success: false,
-                message: "Cannot delete zone because it contains districts.",
+                message: "Cannot delete zone because it contains districts."
             });
         }
+
         const payload = {
             id: zone.Zone_id,
             name: zone.name
         };
 
-        const [result] = await connection.query(
-            `
-            UPDATE m_zone
-            SET
-                deleted = 'Y',
-                delete_datetime = NOW(),
-                delete_by = ?
-            WHERE Zone_id = ?
-            AND deleted IS NULL
-            `,
-            [req.user.id, id]
-        );
-
-
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -459,14 +455,12 @@ export const deleteZone = async (req, res) => {
             );
 
             if (pending) {
-
                 await connection.rollback();
 
                 return res.status(409).json({
                     success: false,
                     message: "A delete request for this zone is already pending."
                 });
-
             }
 
             await createApprovalRequest(connection, {
@@ -495,11 +489,13 @@ export const deleteZone = async (req, res) => {
             });
 
         } else {
+
             await executeDeleteZone(
                 connection,
                 zone.Zone_id,
                 req.user.id
             );
+
             await connection.commit();
 
             await logActivity({
@@ -511,21 +507,23 @@ export const deleteZone = async (req, res) => {
                 ipAddress: req.ip
             });
 
-            res.json({
+            return res.status(200).json({
                 success: true,
-                message: "Zone deleted successfully.",
+                message: "Zone deleted successfully."
             });
         }
+
     } catch (error) {
         console.error(error);
+
         await connection.rollback();
-        res.status(500).json({
+
+        return res.status(500).json({
             success: false,
-            message: "Failed to delete zone.",
+            message: "Failed to delete zone."
         });
+
     } finally {
-
         connection.release();
-
     }
 };

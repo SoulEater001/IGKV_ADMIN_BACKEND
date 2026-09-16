@@ -4,8 +4,8 @@ import { logActivity } from '../utils/activityLogger.js'
 import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { executeCreatePermission, executeDeletePermission } from "../services/permissionService.js";
-import { ROLES } from "../constant/index.js";
 import { hasPendingApproval, createApprovalRequest } from '../services/approvalService.js'
+import { requiresApproval } from "../utils/approval.js";
 
 export const getPermissions = async (req, res) => {
     try {
@@ -169,8 +169,8 @@ export const createPermission = async (req, res) => {
               AND action = ?
             `,
             [
-                resource.trim(),
-                action.trim()
+                normalizedResource,
+                normalizedAction
             ]
         );
 
@@ -183,19 +183,19 @@ export const createPermission = async (req, res) => {
         }
 
         const permissionData = {
-            resource: resource.trim(),
-            action: action.trim(),
+            resource: normalizedResource,
+            action: normalizedAction
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.PERMISSION,
                 ACTIONS.CREATE,
                 {
-                    resource: resource.trim(),
-                    action: action.trim()
+                    resource: normalizedResource,
+                    action: normalizedAction
                 }
             );
 
@@ -223,7 +223,7 @@ export const createPermission = async (req, res) => {
                 userId: req.user.id,
                 action: ACTIONS.CREATE,
                 entity: ENTITIES.PERMISSION,
-                entityId: req.user.id,
+                entityId: null,
                 description: `${req.user.name} requested creation of permission ${permissionData.resource}:${permissionData.action}`,
                 ipAddress: req.ip
             });
@@ -271,9 +271,21 @@ export const createPermission = async (req, res) => {
 };
 
 export const updatePermission = async (req, res) => {
-    try {
+    const connection = await pool.getConnection();
 
-        const { id } = req.params;
+    try {
+        await connection.beginTransaction();
+
+        const permissionId = Number(req.params.id);
+
+        if (!Number.isInteger(permissionId) || permissionId <= 0) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid permission ID."
+            });
+        }
 
         const {
             resource,
@@ -284,97 +296,34 @@ export const updatePermission = async (req, res) => {
             !resource?.trim() ||
             !action?.trim()
         ) {
+            await connection.rollback();
+
             return res.status(400).json({
                 success: false,
                 message: "Resource and action are required."
             });
         }
 
-        const [[permission]] = await pool.query(
-            `
-            SELECT id, resource,
-            action
-            FROM permissions
-            WHERE id = ?
-            `,
-            [id]
-        );
+        const normalizedResource = resource.trim();
+        const normalizedAction = action.trim();
 
-        if (!permission) {
-            return res.status(404).json({
+        if (!PERMISSION_RESOURCE_LIST.includes(normalizedResource)) {
+            await connection.rollback();
+
+            return res.status(400).json({
                 success: false,
-                message: "Permission not found."
+                message: "Invalid permission resource."
             });
         }
 
-        const [[existing]] = await pool.query(
-            `
-            SELECT id
-            FROM permissions
-            WHERE resource = ?
-              AND action = ?
-              AND id <> ?
-            `,
-            [
-                resource.trim(),
-                action.trim(),
-                id
-            ]
-        );
+        if (!PERMISSION_ACTION_LIST.includes(normalizedAction)) {
+            await connection.rollback();
 
-        if (existing) {
-            return res.status(409).json({
+            return res.status(400).json({
                 success: false,
-                message: "Permission already exists."
+                message: "Invalid permission action."
             });
         }
-
-        await pool.query(
-            `
-            UPDATE permissions
-            SET
-                resource = ?,
-                action = ?
-            WHERE id = ?
-            `,
-            [
-                resource.trim(),
-                action.trim(),
-                id
-            ]
-        );
-
-        await logActivity({
-            userId: req.user.id,
-            action: ACTIONS.UPDATE,
-            entity: ENTITIES.PERMISSION,
-            entityId: id,
-            description: `${req.user.name} updated permission ${resource.trim()}:${action.trim()}`,
-            ipAddress: req.ip
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "Permission updated successfully."
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to update permission."
-        });
-
-    }
-};
-
-export const deletePermission = async (req, res) => {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        const { id } = req.params;
 
         const [[permission]] = await connection.query(
             `
@@ -385,7 +334,165 @@ export const deletePermission = async (req, res) => {
             FROM permissions
             WHERE id = ?
             `,
-            [id]
+            [permissionId]
+        );
+
+        if (!permission) {
+            await connection.rollback();
+
+            return res.status(404).json({
+                success: false,
+                message: "Permission not found."
+            });
+        }
+
+        const [[existing]] = await connection.query(
+            `
+            SELECT id
+            FROM permissions
+            WHERE resource = ?
+              AND action = ?
+              AND id <> ?
+            `,
+            [
+                normalizedResource,
+                normalizedAction,
+                permissionId
+            ]
+        );
+
+        if (existing) {
+            await connection.rollback();
+
+            return res.status(409).json({
+                success: false,
+                message: "Permission already exists."
+            });
+        }
+
+        const permissionData = {
+            id: permissionId,
+            resource: normalizedResource,
+            action: normalizedAction
+        };
+
+        if (await requiresApproval(connection, req.user.id)) {
+
+            const pending = await hasPendingApproval(
+                connection,
+                ENTITIES.PERMISSION,
+                ACTIONS.UPDATE,
+                {
+                    id: permissionId
+                }
+            );
+
+            if (pending) {
+                await connection.rollback();
+
+                return res.status(409).json({
+                    success: false,
+                    message: "An update request for this permission is already pending."
+                });
+            }
+
+            await createApprovalRequest(connection, {
+                resource: ENTITIES.PERMISSION,
+                action: ACTIONS.UPDATE,
+                recordId: permissionId,
+                payload: permissionData,
+                requestedBy: req.user.id
+            });
+
+            await connection.commit();
+
+            await logActivity({
+                userId: req.user.id,
+                action: ACTIONS.UPDATE,
+                entity: ENTITIES.PERMISSION,
+                entityId: permissionId,
+                description: `${req.user.name} requested update of permission ${normalizedResource}:${normalizedAction}`,
+                ipAddress: req.ip
+            });
+
+            return res.status(200).json({
+                success: true,
+                approvalRequired: true,
+                message: "Permission update request sent for approval."
+            });
+        }
+
+        await connection.query(
+            `
+            UPDATE permissions
+            SET
+                resource = ?,
+                action = ?
+            WHERE id = ?
+            `,
+            [
+                normalizedResource,
+                normalizedAction,
+                permissionId
+            ]
+        );
+
+        await connection.commit();
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.PERMISSION,
+            entityId: permissionId,
+            description: `${req.user.name} updated permission ${normalizedResource}:${normalizedAction}`,
+            ipAddress: req.ip
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Permission updated successfully."
+        });
+
+    } catch (error) {
+        await connection.rollback();
+
+        console.error(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to update permission."
+        });
+
+    } finally {
+        connection.release();
+    }
+};
+
+export const deletePermission = async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        const permissionId = Number(req.params.id);
+
+        if (!Number.isInteger(permissionId) || permissionId <= 0) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid permission ID."
+            });
+        }
+
+        const [[permission]] = await connection.query(
+            `
+            SELECT
+                id,
+                resource,
+                action
+            FROM permissions
+            WHERE id = ?
+            `,
+            [permissionId]
         );
 
         if (!permission) {
@@ -396,19 +503,19 @@ export const deletePermission = async (req, res) => {
             });
         }
         const payload = {
-            id: permission.id,
+            id: permissionId,
             resource: permission.resource,
             action: permission.action
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.PERMISSION,
                 ACTIONS.DELETE,
                 {
-                    id: permission.id
+                    id: permissionId
                 }
             );
 
@@ -426,7 +533,7 @@ export const deletePermission = async (req, res) => {
             await createApprovalRequest(connection, {
                 resource: ENTITIES.PERMISSION,
                 action: ACTIONS.DELETE,
-                recordId: permission.id,
+                recordId: permissionId,
                 payload,
                 requestedBy: req.user.id
             });
@@ -437,7 +544,7 @@ export const deletePermission = async (req, res) => {
                 userId: req.user.id,
                 action: ACTIONS.DELETE,
                 entity: ENTITIES.PERMISSION,
-                entityId: permission.id,
+                entityId: permissionId,
                 description: `${req.user.name} requested deletion of permission ${permission.resource}:${permission.action}`,
                 ipAddress: req.ip
             });
@@ -449,9 +556,9 @@ export const deletePermission = async (req, res) => {
             });
 
         } else {
-            const permissionId = await executeDeletePermission(
+            const deletedPermissionId = await executeDeletePermission(
                 connection,
-                permission.id
+                permissionId
             );
 
             await connection.commit();
@@ -461,7 +568,7 @@ export const deletePermission = async (req, res) => {
                 userId: req.user.id,
                 action: ACTIONS.DELETE,
                 entity: ENTITIES.PERMISSION,
-                entityId: permissionId,
+                entityId: deletedPermissionId,
                 description: `${req.user.name} deleted permission ${permission.resource}:${permission.action}`,
                 ipAddress: req.ip
             });

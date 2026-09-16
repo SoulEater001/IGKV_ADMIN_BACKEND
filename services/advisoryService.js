@@ -116,11 +116,9 @@ export const executeCreateAdvisory = async (
     let advisoryMainId;
 
     if (mainRows.length > 0) {
-
         advisoryMainId = mainRows[0].id;
 
     } else {
-
         const [result] = await connection.query(
             `
             INSERT INTO imd_advisory_main
@@ -146,7 +144,6 @@ export const executeCreateAdvisory = async (
                 advisoryMainId
             ]
         );
-
     }
 
     const [detailResult] = await connection.query(
@@ -159,11 +156,12 @@ export const executeCreateAdvisory = async (
             block_lg_code,
             cat_id,
             crop_id,
+            crop_stage_id,
             advisory_type_id,
             advisory,
             language_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
             advisoryMainId,
@@ -172,6 +170,7 @@ export const executeCreateAdvisory = async (
             data.block_lg_code,
             data.imd_category_id,
             data.crop_id,
+            data.crop_stage_id,
             data.imd_advisory_type_id,
             data.advisory,
             data.language_id
@@ -179,7 +178,6 @@ export const executeCreateAdvisory = async (
     );
 
     return detailResult.insertId;
-
 };
 
 export const executeCreateBulkAdvisories = async (
@@ -492,6 +490,7 @@ export const executeUpdateAdvisory = async (
         block_lg_code,
         imd_category_id,
         crop_id,
+        crop_stage_id,
         imd_advisory_type_id,
         advisory,
         language_id
@@ -506,6 +505,7 @@ export const executeUpdateAdvisory = async (
             block_lg_code = ?,
             cat_id = ?,
             crop_id = ?,
+            crop_stage_id = ?,
             advisory_type_id = ?,
             advisory = ?,
             language_id = ?
@@ -517,6 +517,7 @@ export const executeUpdateAdvisory = async (
             block_lg_code,
             imd_category_id,
             crop_id,
+            crop_stage_id,
             imd_advisory_type_id,
             advisory.trim(),
             language_id,
@@ -525,5 +526,4 @@ export const executeUpdateAdvisory = async (
     );
 
     return id;
-
 };

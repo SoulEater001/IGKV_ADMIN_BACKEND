@@ -2,6 +2,10 @@ export const executeCreateCategory = async (
     connection,
     data
 ) => {
+    const {
+        img_category_name,
+        imd_category_name_h
+    } = data;
 
     const [[existing]] = await connection.query(
         `
@@ -9,7 +13,7 @@ export const executeCreateCategory = async (
         FROM imd_m_category
         WHERE img_category_name = ?
         `,
-        [data.img_category_name]
+        [img_category_name]
     );
 
     if (existing) {
@@ -20,11 +24,15 @@ export const executeCreateCategory = async (
         `
         INSERT INTO imd_m_category
         (
-            img_category_name
+            img_category_name,
+            imd_category_name_h
         )
-        VALUES (?)
+        VALUES (?, ?)
         `,
-        [data.img_category_name]
+        [
+            img_category_name,
+            imd_category_name_h
+        ]
     );
 
     await connection.query(
@@ -40,7 +48,6 @@ export const executeCreateCategory = async (
     );
 
     return result.insertId;
-
 };
 
 export const executeDeleteCategory = async (
@@ -69,22 +76,26 @@ export const executeUpdateCategory = async (
     data
 ) => {
 
-    const {id,
-        img_category_name
+    const {
+        id,
+        img_category_name,
+        imd_category_name_h
     } = data;
 
     await connection.query(
         `
         UPDATE imd_m_category
-        SET img_category_name = ?
+        SET
+            img_category_name = ?,
+            imd_category_name_h = ?
         WHERE id = ?
         `,
         [
             img_category_name.trim(),
+            imd_category_name_h.trim(),
             id
         ]
     );
 
     return id;
-
 };

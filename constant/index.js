@@ -14,6 +14,7 @@ export const PERMISSION_RESOURCES = Object.freeze({
     ROLES: "roles",
     PERMISSIONS: "permissions",
     APPROVALS: "approvals",
+    ACTIVITY_LOGS: "activity-logs",
     CATEGORIES: "categories",
     ADVISORY_TYPES: "advisory-types",
     CROPS: "crops",
@@ -31,13 +32,13 @@ export const PERMISSION_RESOURCE_LIST = Object.freeze(
 );
 
 export const ROLES = {
-    ADMIN : "ADMIN",
-    SUPER_ADMIN : "SUPER_ADMIN",
-    TEST : "TEST"
+    ADMIN: "ADMIN",
+    SUPER_ADMIN: "SUPER_ADMIN",
+    TEST: "TEST"
 }
 
 export const APPROVAL_STATUS = {
     APPROVED: "APPROVED",
-    REJECTED:"REJECTED",
-    PENDING:"PENDING"
+    REJECTED: "REJECTED",
+    PENDING: "PENDING"
 }

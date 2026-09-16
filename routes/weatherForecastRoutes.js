@@ -1,34 +1,55 @@
 import express from "express";
-import { authenticate } from "../middleware/authMiddleware.js";
-import { authorize } from "../middleware/authMiddleware.js";
-import { ROLE_GROUPS } from "../utils/approval.js";
-import { bulkUpsertForecasts, getForecasts, getExistingForecastOptions, getForecastsWithOptions, upsertWeatherForecastSummary} from "../controllers/weatherForecastController.js";
+import { authenticate, authorizePermissions } from "../middleware/authMiddleware.js";
+import { bulkUpsertForecasts, getForecasts, getExistingForecastOptions, getForecastsWithOptions, upsertWeatherForecastSummary } from "../controllers/weatherForecastController.js";
+import { PERMISSION_ACTIONS, PERMISSION_RESOURCES } from "../constant/index.js";
 
 const router = express.Router();
 
 router.use(authenticate);
-router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL));
+
 
 router.get(
     '/',
+    authorizePermissions(
+        PERMISSION_RESOURCES.WEATHER,
+        PERMISSION_ACTIONS.READ
+    ),
     getForecasts
 );
 
 router.get(
     '/load-existing',
+    authorizePermissions(
+        PERMISSION_RESOURCES.WEATHER,
+        PERMISSION_ACTIONS.READ
+    ),
     getForecastsWithOptions
 );
 
 router.get(
     '/existing-options',
+    authorizePermissions(
+        PERMISSION_RESOURCES.WEATHER,
+        PERMISSION_ACTIONS.READ
+    ),
     getExistingForecastOptions
 );
 
 router.post(
-  '/bulk-upsert',
-  bulkUpsertForecasts
+    '/bulk-upsert',
+    authorizePermissions(
+        PERMISSION_RESOURCES.WEATHER,
+        PERMISSION_ACTIONS.CREATE
+    ),
+    bulkUpsertForecasts
 );
 
-router.post("/summary/upsert",upsertWeatherForecastSummary);
+router.post("/summary/upsert",
+    authorizePermissions(
+        PERMISSION_RESOURCES.WEATHER,
+        PERMISSION_ACTIONS.CREATE
+    ),
+    upsertWeatherForecastSummary
+);
 
 export default router;

@@ -21,6 +21,7 @@ import categoryRoutes from './routes/categoryRoutes.js';
 import cropRoutes from './routes/cropRoutes.js';
 import cropStageRoutes from './routes/cropStageRoutes.js';
 import cropRangeRoutes from './routes/cropRangeRoutes.js';
+import sensorAlertRoutes from './routes/sensorAlertRoutes.js';
 import adminUsersRoutes from './routes/adminUsersRoutes.js';
 import rolesRoutes from './routes/rolesRoutes.js';
 import permissionRoutes from './routes/permissionRoutes.js';
@@ -32,6 +33,7 @@ import weatherObservationRoutes from './routes/weatherObservationRoutes.js';
 import weatherForecastRoutes from './routes/weatherForecastRoutes.js';
 
 import farmerRoutes from './routes/farmer.routes.js'
+import iotUserRoutes from './routes/iot-user.routes.js'
 import filterRoutes from './routes/filters.routes.js'
 import chartRoutes from './routes/chart.routes.js'
 import deviceRoutes from './routes/device.routes.js'
@@ -69,6 +71,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/crops", cropRoutes);
 app.use("/api/crop-stages", cropStageRoutes);
 app.use("/api/crop-ranges", cropRangeRoutes);
+app.use("/api/sensor-alerts", sensorAlertRoutes);
 app.use("/api/users", adminUsersRoutes);
 app.use("/api/roles", rolesRoutes);
 app.use("/api/permissions", permissionRoutes);
@@ -78,12 +81,13 @@ app.use("/api/activity-logs", activityRoutes);
 app.use("/api/weather/stations", weatherStationRoutes);
 app.use("/api/weather/observations", weatherObservationRoutes);
 app.use("/api/weather/forecasts", weatherForecastRoutes);
+app.use('/api/pdf', weatherPdfRoutes);
 
+app.use("/api/users", iotUserRoutes)
 app.use("/api/farmers", farmerRoutes);
 app.use("/api/filters", filterRoutes);
 app.use("/api/charts", chartRoutes);
 app.use("/api/devices", deviceRoutes);
-app.use('/api/pdf',weatherPdfRoutes);
 
 async function startServer() {
     try {
@@ -92,7 +96,7 @@ async function startServer() {
         conn.release();
 
         initWS(server);
-        // initMQTT();
+        initMQTT();
         startDeviceSnapshotWorker();
 
         server.listen(PORT, () => {

@@ -321,7 +321,7 @@ export const createBlock = async (req, res) => {
             longitude
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -492,7 +492,7 @@ export const updateBlock = async (req, res) => {
             longitude
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -641,7 +641,7 @@ export const deleteBlock = async (req, res) => {
             name: block.name
         }
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,

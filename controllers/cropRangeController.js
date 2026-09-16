@@ -278,7 +278,7 @@ export const createCropRange = async (req, res) => {
             is_active: is_active ? 1 : 0
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.CROP_RANGE,
@@ -514,7 +514,7 @@ export const updateCropRange = async (req, res) => {
             is_active: is_active ? 1 : 0
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.CROP_RANGE,
@@ -654,7 +654,7 @@ export const deleteCropRange = async (req, res) => {
             is_active: 0
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.CROP_RANGE,

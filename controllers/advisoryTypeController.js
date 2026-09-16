@@ -79,7 +79,7 @@ export const createAdvisoryType = async (req, res) => {
 
         }
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -243,7 +243,7 @@ export const updateAdvisoryType = async (req, res) => {
 
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -373,7 +373,7 @@ export const deleteAdvisoryType = async (req, res) => {
             imd_advisory_type_name: advisoryType.imd_advisory_type_name
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,

@@ -80,7 +80,6 @@ export const executeUpdateUser = async (
     connection,
     userData
 ) => {
-
     let sql = `
         UPDATE admin_users
         SET
@@ -96,11 +95,8 @@ export const executeUpdateUser = async (
     ];
 
     if (userData.password) {
-
         sql += `, password = ?`;
-
         params.push(userData.password);
-
     }
 
     sql += ` WHERE id = ?`;
@@ -134,27 +130,33 @@ export const executeUpdateUser = async (
         [values]
     );
 
-    const newRoleIds = [...userData.role_ids]
-        .map(Number)
-        .sort((a, b) => a - b);
+    const newRoleIds = [
+        ...new Set(
+            userData.role_ids.map(Number)
+        )
+    ].sort((a, b) => a - b);
+
+    const currentRoleIds = [
+        ...new Set(
+            userData.currentRoleIds.map(Number)
+        )
+    ].sort((a, b) => a - b);
 
     const rolesChanged =
-        JSON.stringify(userData.currentRoleIds) !==
+        JSON.stringify(currentRoleIds) !==
         JSON.stringify(newRoleIds);
 
     const authorizationChanged =
         rolesChanged ||
-        Boolean(userData.previousIsActive) !== Boolean(userData.is_active);
+        Boolean(userData.previousIsActive) !==
+        Boolean(userData.is_active);
 
     if (authorizationChanged) {
-
         await invalidateUserTokens(
             connection,
             userData.id
         );
-
     }
 
     return userData.id;
-
 };

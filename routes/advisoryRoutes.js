@@ -1,14 +1,13 @@
 import express from 'express'
 import { createAdvisory, getAdvisoriesPaginated, createBulkAdvisories, loadPreviousAdvisories, getPreviousAdvisoryOptions, createAdvisoryMain, submitAdvisoryWizard } from '../controllers/advisoryController.js';
 import { updateAdvisory, deleteAdvisory } from '../controllers/advisoryController.js';
-import { authenticate, authorize, authorizePermissions } from '../middleware/authMiddleware.js'
-import { ROLE_GROUPS } from '../utils/approval.js';
+import { authenticate, authorizePermissions } from '../middleware/authMiddleware.js'
 import { PERMISSION_RESOURCES, PERMISSION_ACTIONS } from '../constant/index.js';
 
 const router = express.Router();
 
 router.use(authenticate)
-router.use(authorize(...ROLE_GROUPS.ADMIN_PANEL))
+
 
 router.post(
     "/main/create",

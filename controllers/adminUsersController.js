@@ -5,9 +5,7 @@ import { ACTIONS } from "../constant/activityActions.js";
 import { ENTITIES } from "../constant/activityEntities.js";
 import { createApprovalRequest, hasPendingApproval } from "../services/approvalService.js";
 import { executeCreateUser, executeDeleteUser, executeUpdateUser } from "../services/adminUserService.js";
-import { ROLES } from "../constant/index.js";
 import { requiresApproval, canManageUser } from "../utils/approval.js";
-import { invalidateUserTokens } from '../utils/token.js'
 
 export const getUsers = async (req, res) => {
     try {
@@ -40,6 +38,7 @@ export const getUsers = async (req, res) => {
 
             LEFT JOIN roles r
                  ON ur.role_id = r.id
+                 AND r.is_active = 1
 
                  GROUP BY
                     u.id,
@@ -108,6 +107,25 @@ export const createUser = async (req, res) => {
             });
         }
 
+        const normalizedRoleIds = [
+            ...new Set(
+                role_ids.map(Number)
+            )
+        ];
+
+        if (
+            normalizedRoleIds.some(
+                roleId => !Number.isInteger(roleId) || roleId <= 0
+            )
+        ) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid role ID."
+            });
+        }
+
         const [[existing]] = await connection.query(
             `
             SELECT id, name
@@ -130,11 +148,12 @@ export const createUser = async (req, res) => {
             SELECT id, name
             FROM roles
             WHERE id IN (?)
+                AND is_active = 1
         `,
-            [role_ids]
+            [normalizedRoleIds]
         );
 
-        if (roles.length !== role_ids.length) {
+        if (roles.length !== normalizedRoleIds.length) {
             await connection.rollback();
             return res.status(404).json({
                 success: false,
@@ -142,15 +161,19 @@ export const createUser = async (req, res) => {
             });
         }
 
-        if (!canManageUser(req.user, roles.map(r => r.name))) {
+        const allowed = await canManageUser(
+            connection,
+            req.user.id,
+            roles.map(role => role.id)
+        );
 
+        if (!allowed) {
             await connection.rollback();
 
             return res.status(403).json({
                 success: false,
                 message: "You are not allowed to assign one or more selected roles."
             });
-
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -159,11 +182,11 @@ export const createUser = async (req, res) => {
             name: name.trim(),
             email: email.trim(),
             password: hashedPassword,
-            role_ids,
+            role_ids: normalizedRoleIds,
             is_active
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -195,8 +218,8 @@ export const createUser = async (req, res) => {
                 userId: req.user.id,
                 action: ACTIONS.CREATE,
                 entity: ENTITIES.USER,
-                entityId: req.user.id,
-                description: `${req.user.name} requested creation of user ${name}`,
+                entityId: null,
+                description: `${req.user.name} requested creation of user ${name.trim()}`,
                 ipAddress: req.ip
             });
 
@@ -249,10 +272,18 @@ export const updateUser = async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-
         await connection.beginTransaction();
 
-        const { id } = req.params;
+        const userId = Number(req.params.id);
+
+        if (!Number.isInteger(userId) || userId <= 0) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid user ID."
+            });
+        }
 
         const {
             name,
@@ -276,16 +307,35 @@ export const updateUser = async (req, res) => {
             });
         }
 
+        const normalizedRoleIds = [
+            ...new Set(
+                role_ids.map(Number)
+            )
+        ];
+
+        if (
+            normalizedRoleIds.some(
+                roleId => !Number.isInteger(roleId) || roleId <= 0
+            )
+        ) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid role ID."
+            });
+        }
+
         const [[user]] = await connection.query(
             `
-    SELECT
-    id,
-    name,
-    is_active
-FROM admin_users
-WHERE id = ?
-    `,
-            [id]
+            SELECT
+                id,
+                name,
+                is_active
+            FROM admin_users
+            WHERE id = ?
+            `,
+            [userId]
         );
 
         if (!user) {
@@ -297,43 +347,45 @@ WHERE id = ?
             });
         }
 
-        if (Number(id) === req.user.id) {
-
+        if (userId === req.user.id) {
             await connection.rollback();
 
             return res.status(403).json({
                 success: false,
                 message: "You cannot modify your own account."
             });
-
         }
 
         const [existingRoles] = await connection.query(
             `
-    SELECT
-        ur.role_id,
-        r.name
-    FROM user_roles ur
-    JOIN roles r
-        ON ur.role_id = r.id
-    WHERE ur.user_id = ?
-    `,
-            [id]
+            SELECT
+                ur.role_id,
+                r.name
+            FROM user_roles ur
+            JOIN roles r
+                ON ur.role_id = r.id
+            WHERE ur.user_id = ?
+            `,
+            [userId]
         );
 
-        if (!canManageUser(req.user, existingRoles.map(r => r.name))) {
+        const allowed = await canManageUser(
+            connection,
+            req.user.id,
+            existingRoles.map(role => role.role_id)
+        );
 
+        if (!allowed) {
             await connection.rollback();
 
             return res.status(403).json({
                 success: false,
                 message: "You are not allowed to modify this user."
             });
-
         }
 
         const currentRoleIds = existingRoles
-            .map(r => Number(r.role_id))
+            .map(role => Number(role.role_id))
             .sort((a, b) => a - b);
 
         const [[emailUser]] = await connection.query(
@@ -345,12 +397,11 @@ WHERE id = ?
             `,
             [
                 email.trim(),
-                id
+                userId
             ]
         );
 
         if (emailUser) {
-
             await connection.rollback();
 
             return res.status(409).json({
@@ -361,64 +412,77 @@ WHERE id = ?
 
         const [roles] = await connection.query(
             `
-    SELECT id,name
-    FROM roles
-    WHERE id IN (?)
-    `,
-            [role_ids]
+            SELECT
+                id,
+                name
+            FROM roles
+            WHERE id IN (?)
+              AND is_active = 1
+            `,
+            [normalizedRoleIds]
         );
 
-        if (roles.length !== role_ids.length) {
-
+        if (roles.length !== normalizedRoleIds.length) {
             await connection.rollback();
 
             return res.status(404).json({
                 success: false,
-                message: "Role not found."
+                message: "One or more roles were not found or are inactive."
+            });
+        }
+
+        const canManageNewRoles = await canManageUser(
+            connection,
+            req.user.id,
+            roles.map(role => role.id)
+        );
+
+        if (!canManageNewRoles) {
+            await connection.rollback();
+
+            return res.status(403).json({
+                success: false,
+                message: "You are not allowed to assign one or more selected roles."
             });
         }
 
         const userData = {
-            id: Number(id),
+            id: userId,
             name: name.trim(),
             email: email.trim(),
-            role_ids,
+            role_ids: normalizedRoleIds,
             is_active,
             password: password?.trim()
                 ? await bcrypt.hash(password, 10)
                 : null,
-            role_ids,
-            is_active,
             currentRoleIds,
             previousIsActive: Boolean(user.is_active)
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
                 ENTITIES.USER,
                 ACTIONS.UPDATE,
                 {
-                    id: Number(id)
+                    id: userId
                 }
             );
 
             if (pending) {
-
                 await connection.rollback();
 
                 return res.status(409).json({
                     success: false,
                     message: "An update request for this user is already pending."
                 });
-
             }
 
             await createApprovalRequest(connection, {
                 resource: ENTITIES.USER,
                 action: ACTIONS.UPDATE,
-                recordId: Number(id),
+                recordId: userId,
                 payload: userData,
                 requestedBy: req.user.id
             });
@@ -429,7 +493,7 @@ WHERE id = ?
                 userId: req.user.id,
                 action: ACTIONS.UPDATE,
                 entity: ENTITIES.USER,
-                entityId: Number(id),
+                entityId: userId,
                 description: `${req.user.name} requested update of user ${name.trim()}`,
                 ipAddress: req.ip
             });
@@ -439,27 +503,30 @@ WHERE id = ?
                 approvalRequired: true,
                 message: "User update request sent for approval."
             });
-
-        } else {
-            await executeUpdateUser(connection, userData);
-            await connection.commit();
-
-            await logActivity({
-                userId: req.user.id,
-                action: ACTIONS.UPDATE,
-                entity: ENTITIES.USER,
-                entityId: Number(id),
-                description: `${req.user.name} updated user ${name.trim()}`,
-                ipAddress: req.ip
-            });
-
-            return res.status(200).json({
-                success: true,
-                message: "User updated successfully."
-            });
         }
-    } catch (error) {
 
+        await executeUpdateUser(
+            connection,
+            userData
+        );
+
+        await connection.commit();
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.UPDATE,
+            entity: ENTITIES.USER,
+            entityId: userId,
+            description: `${req.user.name} updated user ${name.trim()}`,
+            ipAddress: req.ip
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "User updated successfully."
+        });
+
+    } catch (error) {
         await connection.rollback();
 
         console.error(error);
@@ -470,18 +537,27 @@ WHERE id = ?
         });
 
     } finally {
-
         connection.release();
-
     }
 };
 
 export const deleteUser = async (req, res) => {
     const connection = await pool.getConnection();
-    try {
 
-        const { id } = req.params;
+    try {
         await connection.beginTransaction();
+
+        const userId = Number(req.params.id);
+
+        if (!Number.isInteger(userId) || userId <= 0) {
+            await connection.rollback();
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid user ID."
+            });
+        }
+
         const [rows] = await connection.query(
             `
             SELECT
@@ -497,7 +573,7 @@ export const deleteUser = async (req, res) => {
                 ON ur.role_id = r.id
             WHERE u.id = ?
             `,
-            [id]
+            [userId]
         );
 
         if (!rows.length) {
@@ -514,30 +590,35 @@ export const deleteUser = async (req, res) => {
             name: rows[0].name,
             email: rows[0].email,
             roles: rows
-                .filter(r => r.role_id)
-                .map(r => ({
-                    id: r.role_id,
-                    name: r.role_name
+                .filter(row => row.role_id)
+                .map(row => ({
+                    id: row.role_id,
+                    name: row.role_name
                 }))
         };
 
-        if (req.user.id == Number(id)) {
+        if (userId === req.user.id) {
             await connection.rollback();
+
             return res.status(400).json({
                 success: false,
                 message: "You cannot delete your own account."
             });
         }
 
-        if (!canManageUser(req.user, user.roles.map(r => r.name))) {
+        const allowed = await canManageUser(
+            connection,
+            req.user.id,
+            user.roles.map(role => role.id)
+        );
 
+        if (!allowed) {
             await connection.rollback();
 
             return res.status(403).json({
                 success: false,
                 message: "You are not allowed to delete this user."
             });
-
         }
 
         const payload = {
@@ -547,7 +628,7 @@ export const deleteUser = async (req, res) => {
             role: user.roles
         };
 
-        if (requiresApproval(req.user)) {
+        if (await requiresApproval(connection, req.user.id)) {
 
             const pending = await hasPendingApproval(
                 connection,
@@ -560,6 +641,7 @@ export const deleteUser = async (req, res) => {
 
             if (pending) {
                 await connection.rollback();
+
                 return res.status(409).json({
                     success: false,
                     message: "A delete request for this user is already pending."
@@ -590,32 +672,34 @@ export const deleteUser = async (req, res) => {
                 approvalRequired: true,
                 message: "User deletion request sent for approval."
             });
-
-        } else {
-            const deletedUserId = await executeDeleteUser(
-                connection,
-                user.id
-            );
-            await connection.commit();
-            await logActivity({
-                userId: req.user.id,
-                action: ACTIONS.DELETE,
-                entity: ENTITIES.USER,
-                entityId: deletedUserId,
-                description: `${req.user.name} deleted user ${user.name}`,
-                ipAddress: req.ip
-            });
-
-            return res.status(200).json({
-                success: true,
-                message: "User deleted successfully."
-            });
         }
 
+        const deletedUserId = await executeDeleteUser(
+            connection,
+            user.id
+        );
+
+        await connection.commit();
+
+        await logActivity({
+            userId: req.user.id,
+            action: ACTIONS.DELETE,
+            entity: ENTITIES.USER,
+            entityId: deletedUserId,
+            description: `${req.user.name} deleted user ${user.name}`,
+            ipAddress: req.ip
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "User deleted successfully."
+        });
+
     } catch (error) {
+        await connection.rollback();
 
         console.error(error);
-        await connection.rollback();
+
         return res.status(500).json({
             success: false,
             message: "Failed to delete user."

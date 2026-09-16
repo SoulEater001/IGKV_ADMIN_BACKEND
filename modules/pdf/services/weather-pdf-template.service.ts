@@ -1,9 +1,11 @@
-import { resolveWeatherPdfStationTemplate } from "../config/weather-pdf-template.config.ts";
-import type { WeatherPdfStationContext } from "../types/weather-pdf.types.ts";
+import fs from 'fs/promises';
 import path from 'path';
 
-export class WeatherPdfTemplateService{
- getTemplateDirectory(
+import { resolveWeatherPdfStationTemplate, resolveWeatherPdfTemplateFiles } from "../config/weather-pdf-template.config.ts";
+import type { WeatherPdfStationContext } from "../types/weather-pdf.types.ts";
+
+export class WeatherPdfTemplateService {
+  getTemplateDirectory(
     reportType: string,
     weatherDataType: string,
     station: WeatherPdfStationContext
@@ -11,7 +13,7 @@ export class WeatherPdfTemplateService{
 
     const basePath = path.join(
       process.cwd(),
-      'modules',    
+      'modules',
       'pdf',
       'templates'
     );
@@ -64,5 +66,125 @@ export class WeatherPdfTemplateService{
     throw new Error(
       `Template not implemented for ${reportType} ${weatherDataType}.`
     );
+  }
+
+  async loadTemplate(
+    reportType: string,
+    weatherDataType: string,
+    station: WeatherPdfStationContext,
+    languageId? : number
+  ): Promise<{
+    html: string;
+    css: string;
+    logo: string;
+    govLogo: string;
+  }> {
+    const templateDirectory =
+      this.getTemplateDirectory(
+        reportType,
+        weatherDataType,
+        station
+      );
+
+    const templateFiles =
+      resolveWeatherPdfTemplateFiles(
+        reportType,
+        weatherDataType,
+        languageId
+      );
+
+    if (!templateFiles) {
+      throw new Error(
+        `No PDF template files configured for ${reportType} ${weatherDataType}`
+      );
+    }
+
+    const templatePath =
+      path.join(
+        templateDirectory,
+        templateFiles.html
+      );
+
+    const cssPath =
+      path.join(
+        templateDirectory,
+        templateFiles.css
+      );
+
+    const logoPath =
+      templateFiles.logo
+        ? path.join(
+          templateDirectory,
+          templateFiles.logo
+        )
+        : null;
+
+    const govLogoPath =
+      templateFiles.govLogo
+        ? path.join(
+          templateDirectory,
+          templateFiles.govLogo
+        )
+        : null;
+
+    const requiredFiles = [
+      templatePath,
+      cssPath,
+      ...(logoPath ? [logoPath] : [])
+    ];
+
+    for (const file of requiredFiles) {
+      try {
+        await fs.access(file);
+      } catch {
+        throw new Error(
+          `PDF template file missing: ${file}`
+        );
+      }
+    }
+
+    let logo = '';
+    let govLogo = '';
+
+    if (logoPath) {
+      const logoBuffer =
+        await fs.readFile(logoPath);
+
+      logo =
+        `data:image/png;base64,${logoBuffer.toString('base64')}`;
+    }
+
+    if (govLogoPath) {
+      try {
+        await fs.access(govLogoPath);
+
+        const govLogoBuffer =
+          await fs.readFile(govLogoPath);
+
+        govLogo =
+          `data:image/png;base64,${govLogoBuffer.toString('base64')}`;
+      } catch {
+        govLogo = '';
+      }
+    }
+
+    const html =
+      await fs.readFile(
+        templatePath,
+        'utf-8'
+      );
+
+    const css =
+      await fs.readFile(
+        cssPath,
+        'utf-8'
+      );
+
+    return {
+      html,
+      css,
+      logo,
+      govLogo
+    };
   }
 }
