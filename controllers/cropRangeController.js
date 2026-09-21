@@ -15,7 +15,11 @@ export const getCropRangesPaginated = async (req, res) => {
             page = 1,
             limit = 10,
             search = "",
-            status
+            status,
+            crop_id,
+            crop_stage_id,
+            from_date,
+            to_date
         } = req.query;
 
         const pageNumber = Number(page);
@@ -28,6 +32,26 @@ export const getCropRangesPaginated = async (req, res) => {
         if (status !== undefined && status !== "") {
             where += ` AND cr.is_active = ?`;
             params.push(Number(status));
+        }
+
+        if (crop_id !== undefined && crop_id !== "") {
+            where += ` AND cr.crop_id = ?`;
+            params.push(Number(crop_id));
+        }
+
+        if (crop_stage_id !== undefined && crop_stage_id !== "") {
+            where += ` AND cr.crop_stage_id = ?`;
+            params.push(Number(crop_stage_id));
+        }
+
+        if (from_date !== undefined && from_date !== "") {
+            where += ` AND cr.end_date >= ?`;
+            params.push(from_date);
+        }
+
+        if (to_date !== undefined && to_date !== "") {
+            where += ` AND cr.start_date <= ?`;
+            params.push(to_date);
         }
 
         if (search.trim()) {
@@ -111,7 +135,9 @@ export const getCropRangesPaginated = async (req, res) => {
             ),
             data: rows
         });
+
     } catch (error) {
+
         console.error(
             "Error fetching crop ranges:",
             error

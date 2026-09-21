@@ -74,9 +74,12 @@ export const getSensorAlertsPaginated = async (req, res) => {
         const {
             page = 1,
             limit = 10,
-            search = ""
+            search = "",
+            crop_id,
+            stage_id,
+            sensor_key
         } = req.query;
-
+        console.log("sensor key :", sensor_key)
         const pageNumber = Number(page);
         const pageSize = Number(limit);
         const offset = (pageNumber - 1) * pageSize;
@@ -84,6 +87,21 @@ export const getSensorAlertsPaginated = async (req, res) => {
         let where = `WHERE 1 = 1`;
 
         const params = [];
+
+        if (crop_id) {
+            where += ` AND sa.crop_id = ?`;
+            params.push(Number(crop_id));
+        }
+
+        if (stage_id) {
+            where += ` AND sa.stage_id = ?`;
+            params.push(Number(stage_id));
+        }
+
+        if (sensor_key) {
+            where += ` AND sa.sensor_key = ?`;
+            params.push(sensor_key);
+        }
 
         if (search.trim()) {
 
@@ -119,15 +137,11 @@ export const getSensorAlertsPaginated = async (req, res) => {
         const [[countResult]] = await pool.query(
             `
             SELECT COUNT(*) AS total
-
             FROM sensor_alert sa
-
             LEFT JOIN imd_m_crop c
                 ON sa.crop_id = c.id
-
             LEFT JOIN crop_stages cs
                 ON sa.stage_id = cs.id
-
             ${where}
             `,
             params
@@ -137,34 +151,24 @@ export const getSensorAlertsPaginated = async (req, res) => {
             `
             SELECT
                 sa.id,
-
                 sa.crop_id,
                 c.imd_crop_name AS crop_name,
                 c.imd_crop_name_h AS crop_name_h,
-
                 sa.stage_id,
                 cs.stage_name,
                 cs.stage_name_h,
-
                 sa.sensor_key,
                 sa.sensor_status,
                 sa.sensor_alert_text,
                 sa.sensor_alert_text_h
-
             FROM sensor_alert sa
-
             LEFT JOIN imd_m_crop c
                 ON sa.crop_id = c.id
-
             LEFT JOIN crop_stages cs
                 ON sa.stage_id = cs.id
-
             ${where}
-
             ORDER BY sa.id ASC
-
             LIMIT ?
-
             OFFSET ?
             `,
             [
