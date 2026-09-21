@@ -1,0 +1,187 @@
+@page {
+    size: A4 portrait;
+    margin: 8mm 11mm 10mm 11mm;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+    font-family: "Times New Roman", serif;
+    font-size: 10px;
+    color: #000;
+    background: #fff;
+}
+.report { width: 100%; }
+
+.header {
+    width: 100%;
+    min-height: 108px;
+    position: relative;
+    display: grid;
+    grid-template-columns: 135px 1fr 150px;
+    align-items: center;
+}
+.header-left, .header-right { text-align: center; }
+.header-center { text-align: center; line-height: 1.18; }
+.university-logo { width: 70px; height: 70px; object-fit: contain; display: block; margin: 0 auto 4px; }
+.weather-logo { width: 92px; height: 68px; object-fit: contain; display: block; margin: 0 auto 2px; }
+.left-url, .email { font-size: 9px; font-weight: bold; }
+.phone { font-size: 11px; font-weight: bold; margin-top: 1px; }
+.service-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+.department-title { font-size: 15px; font-weight: bold; }
+.university-title { font-size: 13px; margin-top: 4px; }
+.sponsor-title { font-size: 12px; font-weight: bold; font-style: italic; margin-top: 6px; }
+.header-rule { border-top: 2px solid #000; margin-top: 1px; }
+.strong-rule { border-top: 2px solid #000; margin-top: 3px; }
+
+.office-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    font-size: 8.5px;
+    line-height: 1.2;
+    margin-top: 2px;
+}
+.office-strip > div:nth-child(2) { text-align: center; }
+.office-strip > div:nth-child(3) { text-align: right; }
+.committee {
+    font-size: 8.5px;
+    line-height: 1.25;
+    text-align: left;
+    margin-top: 2px;
+}
+
+.issue-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 3px 8px 0;
+}
+.gkms-title {
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 8px;
+}
+.gkms-sponsor, .district-title {
+    text-align: center;
+    font-size: 12px;
+    font-weight: bold;
+    margin-top: 2px;
+}
+
+.content-heading {
+    font-size: 13px;
+    font-weight: bold;
+    margin-top: 8px;
+    margin-bottom: 4px;
+    text-align: left;
+}
+.content-heading.forecast-intro { text-align: center; font-style: italic; }
+
+.weather-summary {
+    margin: 0 10px 7px;
+    page-break-inside: avoid;
+}
+.weather-summary p {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.35;
+    text-align: justify;
+}
+.weather-summary strong { font-weight: bold; }
+
+.forecast-table, .advisory-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    table-layout: fixed;
+    border: 1px solid #000;
+}
+.forecast-table th, .forecast-table td,
+.advisory-table th, .advisory-table td {
+    border: 1px solid #000 !important;
+    vertical-align: middle;
+}
+.forecast-table th {
+    text-align: center;
+    font-size: 9px;
+    font-weight: bold;
+    line-height: 1.05;
+    padding: 3px 2px;
+}
+.forecast-table td {
+    text-align: center;
+    font-size: 9.5px;
+    line-height: 1.1;
+    padding: 3px 2px;
+}
+.forecast-table th:nth-child(1), .forecast-table td:nth-child(1) { width: 14%; }
+.forecast-table th:nth-child(2), .forecast-table td:nth-child(2) { width: 10%; }
+.forecast-table th:nth-child(3), .forecast-table td:nth-child(3) { width: 10%; }
+.forecast-table th:nth-child(4), .forecast-table td:nth-child(4) { width: 10%; }
+.forecast-table th:nth-child(5), .forecast-table td:nth-child(5) { width: 10%; }
+.forecast-table th:nth-child(6), .forecast-table td:nth-child(6) { width: 10%; }
+.forecast-table th:nth-child(7), .forecast-table td:nth-child(7) { width: 10%; }
+.forecast-table th:nth-child(8), .forecast-table td:nth-child(8) { width: 14%; }
+.forecast-table th:nth-child(9), .forecast-table td:nth-child(9) { width: 8%; }
+.forecast-table thead { display: table-row-group; }
+.forecast-table tr { page-break-inside: avoid; }
+.wind-subhead { display: none; }
+.forecast-district-note { font-size: 9px; margin: 2px 0 5px; }
+
+.section-title {
+    font-size: 14px;
+    font-weight: bold;
+    font-style: italic;
+    text-align: center;
+    margin: 6px 0 4px;
+}
+.advisory-type-section { width: 100%; }
+.advisory-type-block { margin-bottom: 5px; page-break-inside: avoid; }
+.advisory-type-heading { font-size: 11px; font-weight: bold; text-decoration: underline; margin-bottom: 2px; }
+.advisory-type-content { font-size: 10px; line-height: 1.25; }
+.advisory-list { margin: 0 0 0 20px; padding-left: 15px; }
+.advisory-list li { margin-bottom: 2px; padding-left: 2px; }
+
+.crop-title { margin-top: 4px; font-style: normal; text-align: left; text-decoration: underline; }
+.advisory-table thead { display: table-row-group; }
+.advisory-table tr { page-break-inside: auto; }
+.advisory-table th { text-align: center; font-size: 9.5px; line-height: 1.1; padding: 3px 2px; }
+.advisory-table td { font-size: 9.5px; line-height: 1.18; padding: 4px 5px; vertical-align: top; }
+.advisory-table th:nth-child(1), .advisory-table td:nth-child(1) { width: 17%; }
+.advisory-table th:nth-child(2), .advisory-table td:nth-child(2) { width: 17%; }
+.advisory-table th:nth-child(3), .advisory-table td:nth-child(3) { width: 33%; }
+.advisory-table th:nth-child(4), .advisory-table td:nth-child(4) { width: 33%; }
+.advisory-crop, .advisory-crop-stage { text-align: center; vertical-align: middle !important; }
+.advisory-crop { font-weight: normal; }
+.advisory-text { text-align: left; overflow-wrap: break-word; }
+.advisory-note { font-size: 9px; margin-top: 3px; font-weight: bold; }
+
+.category-section { margin-top: 8px; }
+.category-block { margin-bottom: 6px; page-break-inside: avoid; }
+.category-heading { font-size: 11px; font-weight: bold; text-decoration: underline; margin-bottom: 2px; }
+.category-content { font-size: 10px; line-height: 1.25; }
+.category-content .advisory-list { margin-left: 18px; }
+
+.app-box {
+    width: 82%;
+    margin: 7px auto 0;
+    border: 1px solid #000;
+    padding: 6px 9px;
+    font-size: 9.5px;
+    line-height: 1.3;
+}
+.app-box a { color: #0000ee; text-decoration: underline; }
+.nodal-officer {
+    width: 30%;
+    margin: 35px 0 0 auto;
+    text-align: center;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.hidden { display: none; }
+.page-break { break-before: page; page-break-before: always; }
+.no-break { page-break-inside: avoid; }

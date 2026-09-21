@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Agromet Advisory Service</title>
+    <style>
+        /*WEATHER_PDF_CSS*/
+    </style>
+</head>
+<body>
+<div class="report">
+    <div class="header">
+        <div class="header-left">
+            <img src="{{leftLogo}}" alt="IGKV Logo" class="university-logo">
+            <div class="left-url">http://www.igkv.ac.in</div>
+        </div>
+
+        <div class="header-center">
+            <div class="service-title">AGROMET ADVISORY SERVICE</div>
+            <div class="department-title">DEPARTMENT OF AGRICULTURAL METEOROLOGY</div>
+            <div class="university-title">INDIRA GANDHI KRISHI VISHWAVIDYALAYA, RAIPUR</div>
+            <div class="sponsor-title">(Project sponsored by IMD, MoES, New Delhi)</div>
+        </div>
+        
+        <div class="header-right">
+            <img src="{{govtLogo}}" alt="Agromet Observatory" class="weather-logo">
+            <div class="phone">0771-2442557</div>
+            <div class="email">Email- aas_raipur@yahoo.co.in</div>
+        </div>
+    </div>
+
+    <div class="header-rule"></div>
+
+    <div class="office-strip">
+        <div><strong>Patron:</strong> Dr. Girish Chandel, Vice Chancellor</div>
+        <div><strong>Director of Research Services:</strong> Dr. V.K. Tripathi</div>
+        <div><strong>PNO:</strong> Dr. Anil Kumar Verma</div>
+    </div>
+    <div class="office-strip">
+        <div><strong>NO:</strong> Dr. Harsh Vardhan Puranik</div>
+        <div><strong>RA:</strong> Dr. Manoj Kumar Beck</div>
+        <div></div>
+    </div>
+    <div class="committee">
+        <strong>Advisory Committee:</strong>
+        Agrometeorology- Dr. G. K. Das, Shri J.L. Choudhary, Shri V.C. Ratre,
+        Entomology-Dr. Yogesh Meshram, Veg. Science-Dr. Deo Shanker,
+        Fruit Science-Dr. G.L. Sharma, Agronomy-Dr. D. K. Chandrakar,
+        FMPE–Dr. V.M. Victor, LPM–Dr. A. Dubey, Plant Pathology-Dr. H.K. Singh<br>
+        Dr. Goutam Roy (KVK, Raipur), Dr. A. K. Tripathi (KVK, Bilaspur), Dr. Manish Chourasia (KVK, Gariaband),
+        Dr. B. S. Rajput (KVK, Raigarh)<br>
+        Dr. Gunjan Jha (KVK, Rajnandgaon), Dr. K. R. Sahu (KVK, Balod), Dr. Vijay Jain (KVK, Durg),
+        Dr. Rajiv Dixit (KVK, Janjgir-Champa)<br>
+        Shri T. K. Thakur (KVK, Bemetara), Dr. Ishwar Singh (KVK, Dhamtari), Dr. B. P. Tripathi (KVK, Kabirdham),
+        Dr. Birbal Sahu (KVK, Kanker)<br>
+        Dr. S. K. Upadhyay (KVK, Korba), Dr. S. K. Verma (KVK, Mahasamund), Dr. R. L. Sharma (KVK, Mungeli),
+        Dr. A. S. Rajput (KVK, Bhatapara)
+    </div>
+
+    <div class="strong-rule"></div>
+
+    <div class="issue-row">
+        <div>Year: {{reportYear}}</div>
+        <div>Date: {{issueDate}}</div>
+    </div>
+
+    <div class="gkms-title">GRAMIN KRISHI MOUSAM SEWA</div>
+    <div class="gkms-sponsor">(Project Sponsored by India Meteorological Department)</div>
+    <div class="district-title">District: {{districtNameEn}}</div>
+
+    <div class="content-heading">Weather during last four days ({{observationFromDate}} to {{observationEndDate}})</div>
+    {{observationSummarySection}}
+
+    <div class="content-heading forecast-intro">
+        Medium Range Weather forecast for next 05 days received from Regional Meteorological Centre, Raipur is given below
+    </div>
+
+    <table class="forecast-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Rainfall<br>(mm)</th>
+                <th>Max<br>temp<br>(°C)</th>
+                <th>Min<br>Temp<br>(°C)</th>
+                <th>Cloud<br>(Octa)</th>
+                <th>Max<br>RH<br>(%)</th>
+                <th>Min<br>RH<br>(%)</th>
+                <th>Wind<br>Speed<br>(Kmph)</th>
+                <th>Wind<br>Direction</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{forecastRows}}
+        </tbody>
+    </table>
+
+    <div class="forecast-district-note">Forecast district: <strong>{{districtNameEn}}</strong></div>
+    {{forecastSummarySection}}
+
+    <div class="section-title">Weather Based Agro-advisories</div>
+
+    <div class="advisory-type-section">
+        <div class="advisory-type-block {{generalAdvisorySectionClass}}">
+            <div class="advisory-type-heading">General</div>
+            <div class="advisory-type-content">{{generalAdvisorySection}}</div>
+        </div>
+        <div class="advisory-type-block {{messageAdvisorySectionClass}}">
+            <div class="advisory-type-heading">Message Advisory</div>
+            <div class="advisory-type-content">{{messageAdvisorySection}}</div>
+        </div>
+        <div class="advisory-type-block {{weatherWarningImpactSectionClass}}">
+            <div class="advisory-type-heading">Likely Impact of Weather Warning on Agriculture</div>
+            <div class="advisory-type-content">{{weatherWarningImpactSection}}</div>
+        </div>
+        <div class="advisory-type-block {{agrometAdvisorySectionClass}}">
+            <div class="advisory-type-heading">Agromet Advisory</div>
+            <div class="advisory-type-content">{{agrometAdvisorySection}}</div>
+        </div>
+    </div>
+
+    <div class="section-title crop-title">Crop wise advisory</div>
+    <table class="advisory-table">
+        <thead>
+            <tr>
+                <th>Crop name</th>
+                <th>Crop stage</th>
+                <th>Agricultural activities</th>
+                <th>Weather Based Advisory</th>
+            </tr>
+        </thead>
+        <tbody class="advisory-body">
+            {{advisoryRows}}
+        </tbody>
+    </table>
+
+    <div class="advisory-note">
+        Note: Farmers should keep in mind that they should spray chemicals and pesticides only when there is no possibility of rain for at least 4 hours.
+    </div>
+
+    <div class="category-section">
+        <div class="category-block {{fruitVegetableSectionClass}}">
+            <div class="category-heading">Vegetables/ Fruit :</div>
+            <div class="category-content">{{fruitVegetableSection}}</div>
+        </div>
+        <div class="category-block {{animalHusbandryPoultrySectionClass}}">
+            <div class="category-heading">Animal husbandry:</div>
+            <div class="category-content">{{animalHusbandryPoultrySection}}</div>
+        </div>
+    </div>
+
+    <div class="app-box">
+        <div>➢ Farmers are requested to register on Mausam CG app and get weather forecast and agro advisory.</div>
+        <div><strong>Link-</strong> <a href="https://play.google.com/store/apps/details?id=digital.svara.mausamcg.twa">https://play.google.com/store/apps/details?id=digital.svara.mausamcg.twa</a></div>
+    </div>
+
+    <div class="nodal-officer">Nodal Officer<br><strong>GKMS</strong></div>
+</div>
+</body>
+</html>

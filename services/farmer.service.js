@@ -373,15 +373,31 @@ async function getFarmerBasicList(districtId, tehsilNo, villageId, cropCode) {
 async function getHomeSummary() {
   const query = `
     SELECT
-      COUNT(DISTINCT f.uf_id) AS totalFarmers,
-      CAST(SUM(ld.land_area) AS DECIMAL(18,3)) AS totalArea,
-      CAST(SUM(cd.crop_area * 19) AS DECIMAL(18,3)) AS totalProduction,
-      COUNT(DISTINCT cd.crop_code) AS cropCount
-    FROM mas_farmer f
-    LEFT JOIN land_details ld
-      ON f.uf_id = ld.uf_id
-    LEFT JOIN crop_details cd
-      ON cd.id_masterkey_khasra = ld.id_masterkey_khasra;
+      (
+        SELECT COUNT(DISTINCT f.uf_id)
+        FROM mas_farmer f
+      ) AS totalFarmers,
+
+      (
+        SELECT CAST(
+          SUM(ld.land_area)
+          AS DECIMAL(18,3)
+        )
+        FROM land_details ld
+      ) AS totalArea,
+
+      (
+        SELECT CAST(
+          SUM(cd.crop_area * 19)
+          AS DECIMAL(18,3)
+        )
+        FROM crop_details cd
+      ) AS totalProduction,
+
+      (
+        SELECT COUNT(DISTINCT cd.crop_code)
+        FROM crop_details cd
+      ) AS cropCount;
   `;
 
   try {

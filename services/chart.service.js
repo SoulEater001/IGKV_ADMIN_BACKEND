@@ -116,51 +116,83 @@ async function getDistrictDistribution(cropCode = null) {
 
 async function getCropCountHeatmap() {
   const query = `
-  SELECT
-    d.Rev_district_id AS districtId,
-    d.District_Name_Eng AS districtName,
-
-    COALESCE(dt.totalArea,0) AS totalArea,
-    COALESCE(dt.totalProduction,0) AS totalProduction,
-
-    c.cropCode,
-    c.cropName,
-
-    COALESCE(c.cropCount,0) AS cropCount,
-    COALESCE(c.cropArea,0) AS cropArea,
-    COALESCE(c.cropProduction,0) AS cropProduction
-
-FROM mas_districts d
-
-LEFT JOIN (
-
     SELECT
+      d.Rev_district_id AS districtId,
+      d.District_Name_Eng AS districtName,
+
+      COALESCE(land_totals.totalArea, 0) AS totalArea,
+      COALESCE(production_totals.totalProduction, 0) AS totalProduction,
+
+      c.cropCode,
+      c.cropName,
+
+      COALESCE(c.cropCount, 0) AS cropCount,
+      COALESCE(c.cropArea, 0) AS cropArea,
+      COALESCE(c.cropProduction, 0) AS cropProduction
+
+    FROM mas_districts d
+
+    /* ============================================================
+       TOTAL DISTRICT LAND AREA
+       IMPORTANT:
+       No crop_details join here.
+       Therefore land_area cannot be multiplied by crop rows.
+       ============================================================ */
+
+    LEFT JOIN (
+      SELECT
         v.distno AS districtId,
 
-        SUM(ld.land_area) AS totalArea,
+        SUM(ld.land_area) AS totalArea
+
+      FROM land_details ld
+
+      JOIN mas_farmer f
+        ON f.uf_id = ld.uf_id
+
+      JOIN mas_villages v
+        ON f.village_code = v.vsr_census
+
+      GROUP BY
+        v.distno
+
+    ) land_totals
+      ON land_totals.districtId = d.Rev_district_id
+
+    /* ============================================================
+       TOTAL DISTRICT PRODUCTION
+       Crop details are intentionally used here.
+       ============================================================ */
+
+    LEFT JOIN (
+      SELECT
+        v.distno AS districtId,
 
         SUM(cd.crop_area * 19) AS totalProduction
 
-    FROM crop_details cd
+      FROM crop_details cd
 
-    JOIN land_details ld
+      JOIN land_details ld
         ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
 
-    JOIN mas_farmer f
+      JOIN mas_farmer f
         ON f.uf_id = ld.uf_id
 
-    JOIN mas_villages v
+      JOIN mas_villages v
         ON f.village_code = v.vsr_census
 
-    GROUP BY v.distno
+      GROUP BY
+        v.distno
 
-) dt
-ON dt.districtId = d.Rev_district_id
+    ) production_totals
+      ON production_totals.districtId = d.Rev_district_id
 
+    /* ============================================================
+       CROP-WISE DISTRICT DATA
+       ============================================================ */
 
-LEFT JOIN (
-
-    SELECT
+    LEFT JOIN (
+      SELECT
         v.distno AS districtId,
 
         mc.crop_code AS cropCode,
@@ -172,32 +204,32 @@ LEFT JOIN (
 
         SUM(cd.crop_area * 19) AS cropProduction
 
-    FROM crop_details cd
+      FROM crop_details cd
 
-    JOIN land_details ld
+      JOIN land_details ld
         ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
 
-    JOIN mas_farmer f
+      JOIN mas_farmer f
         ON f.uf_id = ld.uf_id
 
-    JOIN mas_villages v
+      JOIN mas_villages v
         ON f.village_code = v.vsr_census
 
-    JOIN mas_crop mc
+      JOIN mas_crop mc
         ON mc.crop_code = cd.crop_code
 
-    GROUP BY
+      GROUP BY
         v.distno,
         mc.crop_code,
         mc.crop_name
 
-) c
-ON c.districtId = d.Rev_district_id
+    ) c
+      ON c.districtId = d.Rev_district_id
 
-ORDER BY
-    districtName,
-    cropName;
-    `
+    ORDER BY
+      districtName,
+      cropName;
+  `;
 
   try {
     const [rows] = await digitalAgriPool.query(query);
@@ -240,7 +272,85 @@ ORDER BY
 
     return [...districtMap.values()];
   } catch (err) {
-    console.error("[ChartService:getCropCountHeatmap] Error:", err.message);
+    console.error(
+      "[ChartService:getCropCountHeatmap] Error:",
+      err.message
+    );
+
+    throw new Error("Database query failed");
+  }
+}
+
+async function getIotSummary() {
+  const query = `
+    SELECT
+      (
+        SELECT COUNT(DISTINCT f.uf_id)
+        FROM iot_users iu
+        JOIN mas_farmer f
+          ON f.mobile_no = iu.mobileNo
+      ) AS connectedFarmers,
+
+      (
+        SELECT COUNT(*)
+        FROM iot_devices d
+        WHERE d.deleted = 0
+          AND d.status = 'online'
+      ) AS activeDevices,
+
+      (
+        SELECT COUNT(DISTINCT v.distno)
+        FROM iot_users iu
+        JOIN mas_farmer f
+          ON f.mobile_no = iu.mobileNo
+        JOIN mas_villages v
+          ON v.vsr_census = f.village_code
+      ) AS districtsCovered,
+
+      (
+        SELECT COUNT(DISTINCT v.vsr_census)
+        FROM iot_users iu
+        JOIN mas_farmer f
+          ON f.mobile_no = iu.mobileNo
+        JOIN mas_villages v
+          ON v.vsr_census = f.village_code
+      ) AS villagesConnected,
+
+      (
+        SELECT CAST(
+          COALESCE(SUM(ld.land_area), 0)
+          AS DECIMAL(18,3)
+        )
+        FROM (
+          SELECT DISTINCT
+            f.uf_id
+          FROM iot_users iu
+          JOIN mas_farmer f
+            ON f.mobile_no = iu.mobileNo
+        ) connected_farmers
+        JOIN land_details ld
+          ON ld.uf_id = connected_farmers.uf_id
+      ) AS totalArea;
+  `;
+
+  try {
+    const [rows] = await digitalAgriPool.query(query);
+
+    const [row = {}] = rows;
+
+    return {
+      connectedFarmers: Number(row.connectedFarmers) || 0,
+      activeDevices: Number(row.activeDevices) || 0,
+      districtsCovered: Number(row.districtsCovered) || 0,
+      villagesConnected: Number(row.villagesConnected) || 0,
+      totalArea: Number(row.totalArea) || 0
+    };
+  } catch (err) {
+    console.error(
+      "[ChartService:getIotSummary] Error:",
+      err.message
+    );
+
     throw new Error("Database query failed");
   }
 }

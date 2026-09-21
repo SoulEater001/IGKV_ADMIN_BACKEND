@@ -42,7 +42,7 @@ WITH filtered_farmers AS (
         v.distno,
         fa.totalLand
 ),
-        
+
 eligible_farmers AS (
     SELECT DISTINCT
         ff.uf_id,
@@ -64,22 +64,25 @@ SELECT
     d.Rev_district_id AS id,
     d.District_Name AS name,
 
-    COALESCE(fcnt.totalFarmers,0) AS totalFarmers,
+    COALESCE(fcnt.totalFarmers, 0) AS totalFarmers,
 
-    COALESCE(overall_aggr.totalArea,0) AS totalArea,
-    COALESCE(crop_aggr.cropArea,0) AS cropArea,
+    COALESCE(land_aggr.totalArea, 0) AS totalArea,
 
-    COALESCE(overall_aggr.totalProduction,0) AS totalProduction,
-    COALESCE(crop_aggr.cropProduction,0) AS cropProduction,
+    COALESCE(selected_crop_aggr.cropArea, 0) AS cropArea,
 
-    COALESCE(overall_aggr.cropCount,0) AS cropCount
+    COALESCE(overall_crop_aggr.totalProduction, 0) AS totalProduction,
+
+    COALESCE(selected_crop_aggr.cropProduction, 0) AS cropProduction,
+
+    COALESCE(overall_crop_aggr.cropCount, 0) AS cropCount
 
 FROM mas_districts d
 
 ${useMatchedJoin
                 ? `
 JOIN (
-    SELECT DISTINCT distno
+    SELECT DISTINCT
+        distno
     FROM eligible_farmers
 ) matched
     ON matched.distno = d.Rev_district_id
@@ -87,24 +90,67 @@ JOIN (
                 : ""
             }
 
+/* ============================================================
+   FARMER COUNT
+   ============================================================ */
+
 LEFT JOIN (
     SELECT
         ef.distno,
         COUNT(DISTINCT ef.uf_id) AS totalFarmers
+
     FROM eligible_farmers ef
-    GROUP BY ef.distno
+
+    GROUP BY
+        ef.distno
+
 ) fcnt
     ON fcnt.distno = d.Rev_district_id
 
-/* ---------- OVERALL DISTRICT DATA ---------- */
+/* ============================================================
+   TOTAL LAND AREA
+   IMPORTANT:
+   This aggregation DOES NOT join crop_details.
+   Therefore multiple crop rows cannot multiply land_area.
+   ============================================================ */
 
 LEFT JOIN (
     SELECT
         ff.distno AS district_id,
 
-        CAST(SUM(ld.land_area) AS DECIMAL(18,3)) AS totalArea,
+        CAST(
+            SUM(ld.land_area)
+            AS DECIMAL(18,3)
+        ) AS totalArea
 
-        CAST(SUM(cd.crop_area * 19) AS DECIMAL(18,3)) AS totalProduction,
+    FROM filtered_farmers ff
+
+    JOIN land_details ld
+        ON ff.uf_id = ld.uf_id
+
+    GROUP BY
+        ff.distno
+
+) land_aggr
+    ON land_aggr.district_id = d.Rev_district_id
+
+/* ============================================================
+   OVERALL CROP DATA
+   Used for:
+     - totalProduction
+     - cropCount
+
+   This includes ALL crops belonging to filtered farmers.
+   ============================================================ */
+
+LEFT JOIN (
+    SELECT
+        ff.distno AS district_id,
+
+        CAST(
+            SUM(cd.crop_area * 19)
+            AS DECIMAL(18,3)
+        ) AS totalProduction,
 
         COUNT(DISTINCT cd.crop_code) AS cropCount
 
@@ -116,20 +162,30 @@ LEFT JOIN (
     JOIN crop_details cd
         ON cd.id_masterkey_khasra = ld.id_masterkey_khasra
 
-    GROUP BY ff.distno
+    GROUP BY
+        ff.distno
 
-) overall_aggr
-    ON overall_aggr.district_id = d.Rev_district_id
+) overall_crop_aggr
+    ON overall_crop_aggr.district_id = d.Rev_district_id
 
-/* ---------- FILTERED CROP DATA ---------- */
+/* ============================================================
+   SELECTED CROP DATA
+   Used only when cropCode is supplied.
+   ============================================================ */
 
 LEFT JOIN (
     SELECT
         ef.distno AS district_id,
 
-        CAST(SUM(cd.crop_area) AS DECIMAL(18,3)) AS cropArea,
+        CAST(
+            SUM(cd.crop_area)
+            AS DECIMAL(18,3)
+        ) AS cropArea,
 
-        CAST(SUM(cd.crop_area * 19) AS DECIMAL(18,3)) AS cropProduction
+        CAST(
+            SUM(cd.crop_area * 19)
+            AS DECIMAL(18,3)
+        ) AS cropProduction
 
     FROM eligible_farmers ef
 
@@ -144,15 +200,24 @@ LEFT JOIN (
                 : "WHERE 1 = 0"
             }
 
-    GROUP BY ef.distno
+    GROUP BY
+        ef.distno
 
-) crop_aggr
-    ON crop_aggr.district_id = d.Rev_district_id
+) selected_crop_aggr
+    ON selected_crop_aggr.district_id = d.Rev_district_id
 
-${districtId ? "WHERE d.Rev_district_id = ?" : ""}
+/* ============================================================
+   DISTRICT FILTER
+   ============================================================ */
 
-ORDER BY d.Rev_district_id;
-        `;
+${districtId
+                ? "WHERE d.Rev_district_id = ?"
+                : ""
+            }
+
+ORDER BY
+    d.Rev_district_id;
+    `;
     },
 
     tehsilSummary({

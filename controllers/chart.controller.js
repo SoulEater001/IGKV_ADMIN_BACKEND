@@ -56,6 +56,20 @@ async function getCropCountHeatmap(req, res) {
   }
 }
 
+export async function getIotSummary(req, res) {
+  try {
+    const summary = await ChartService.getIotSummary();
+
+    return res.status(200).json(summary);
+  } catch (err) {
+    console.error("[ChartController:getIotSummary]", err);
+
+    return res.status(500).json({
+      message: "Failed to load IoT summary"
+    });
+  }
+}
+
 
 export {
   getCropDistribution,

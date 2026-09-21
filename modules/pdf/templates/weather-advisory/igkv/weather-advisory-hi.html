@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <title>कृषि मौसम सलाह सेवा</title>
+    <style>
+        /*WEATHER_PDF_CSS*/
+    </style>
+</head>
+<body>
+<div class="report">
+    <div class="header">
+        <div class="header-left">
+            <img src="{{leftLogo}}" alt="आईजीकेवी लोगो" class="university-logo">
+            <div class="left-url">http://www.igkv.ac.in</div>
+        </div>
+        <div class="header-center">
+            <div class="service-title">कृषि मौसम सलाह सेवा</div>
+            <div class="department-title">कृषि मौसम विज्ञान विभाग</div>
+            <div class="university-title">इंदिरा गांधी कृषि विश्वविद्यालय, रायपुर</div>
+            <div class="sponsor-title">(परियोजना प्रायोजित द्वारा IMD, MoES, नई दिल्ली)</div>
+        </div>
+        <div class="header-right">
+            <img src="{{govtLogo}}" alt="कृषि मौसम वेधशाला" class="weather-logo">
+            <div class="phone">0771-2442557</div>
+            <div class="email">ई-मेल- aas_raipur@yahoo.co.in</div>
+        </div>
+    </div>
+
+    <div class="header-rule"></div>
+    <div class="office-strip">
+        <div><strong>संरक्षक:</strong> डॉ. गिरिश चंदेल, कुलपति</div>
+        <div><strong>निदेशक अनुसंधान सेवाएं:</strong> डॉ. वी.के. त्रिपाठी</div>
+        <div><strong>पी.एन.ओ.:</strong> डॉ. अनिल कुमार वर्मा</div>
+    </div>
+    <div class="office-strip">
+        <div><strong>एन.ओ.:</strong> डॉ. हर्षवर्धन पुराणिक</div>
+        <div><strong>आर.ए.:</strong> डॉ. मनोज कुमार बेक</div>
+        <div></div>
+    </div>
+    <div class="committee">
+        <strong>सलाहकार समिति:</strong>
+        कृषि मौसम विज्ञान- डॉ. जी. के. दास, श्री जे.एल. चौधरी, श्री वी.सी. रात्रे,
+        कीट विज्ञान- डॉ. योगेश मेश्राम, सब्जी विज्ञान- डॉ. देव शंकर,
+        फल विज्ञान- डॉ. जी.एल. शर्मा, सस्य विज्ञान- डॉ. डी.के. चंद्राकर,
+        एफ.एम.पी.ई.- डॉ. वी.एम. विक्टर, एल.पी.एम.- डॉ. ए. दुबे, पादप रोग विज्ञान- डॉ. एच.के. सिंह<br>
+        डॉ. गौतम राय (केवीके, रायपुर), डॉ. ए.के. त्रिपाठी (केवीके, बिलासपुर), डॉ. मनीष चौरसिया (केवीके, गरियाबंद),
+        डॉ. बी.एस. राजपूत (केवीके, रायगढ़)<br>
+        डॉ. गुंजन झा (केवीके, राजनांदगांव), डॉ. के.आर. साहू (केवीके, बालोद), डॉ. विजय जैन (केवीके, दुर्ग),
+        डॉ. राजीव दीक्षित (केवीके, जांजगीर-चांपा)<br>
+        श्री टी.के. ठाकुर (केवीके, बेमेतरा), डॉ. ईश्वर सिंह (केवीके, धमतरी), डॉ. बी.पी. त्रिपाठी (केवीके, कबीरधाम),
+        डॉ. बिरबल साहू (केवीके, कांकेर)<br>
+        डॉ. एस.के. उपाध्याय (केवीके, कोरबा), डॉ. एस.के. वर्मा (केवीके, महासमुंद), डॉ. आर.एल. शर्मा (केवीके, मुंगेली),
+        डॉ. ए.एस. राजपूत (केवीके, भाटापारा)
+    </div>
+    <div class="strong-rule"></div>
+
+    <div class="issue-row">
+        <div>वर्ष: {{reportYear}}</div>
+        <div>दिनांक: {{issueDate}}</div>
+    </div>
+    <div class="gkms-title">ग्रामीण कृषि मौसम सेवा</div>
+    <div class="gkms-sponsor">(परियोजना प्रायोजित द्वारा भारत मौसम विज्ञान विभाग)</div>
+    <div class="district-title">जिला: {{districtNameHi}}</div>
+
+    <div class="content-heading">पिछले चार दिनों का मौसम ({{observationFromDate}} से {{observationEndDate}} तक)</div>
+    {{observationSummarySection}}
+
+    <div class="content-heading forecast-intro">क्षेत्रीय मौसम विज्ञान केन्द्र, रायपुर से प्राप्त अगले 05 दिनों का मध्यम अवधि मौसम पूर्वानुमान नीचे दिया गया है</div>
+
+    <table class="forecast-table">
+        <thead>
+            <tr>
+                <th>दिनांक</th>
+                <th>वर्षा<br>(मिमी.)</th>
+                <th>अधिकतम<br>तापमान<br>(°C)</th>
+                <th>न्यूनतम<br>तापमान<br>(°C)</th>
+                <th>बादल<br>(ऑक्टा)</th>
+                <th>अधिकतम<br>आर्द्रता<br>(%)</th>
+                <th>न्यूनतम<br>आर्द्रता<br>(%)</th>
+                <th>हवा की गति<br>(किमी./घंटा)</th>
+                <th>हवा की दिशा</th>
+            </tr>
+        </thead>
+        <tbody>{{forecastRows}}</tbody>
+    </table>
+
+    <div class="forecast-district-note">पूर्वानुमान जिला: <strong>{{districtNameHi}}</strong></div>
+    {{forecastSummarySection}}
+
+    <div class="section-title">मौसम आधारित कृषि सलाह</div>
+
+    <div class="advisory-type-section">
+        <div class="advisory-type-block {{generalAdvisorySectionClass}}">
+            <div class="advisory-type-heading">सामान्य</div>
+            <div class="advisory-type-content">{{generalAdvisorySection}}</div>
+        </div>
+        <div class="advisory-type-block {{messageAdvisorySectionClass}}">
+            <div class="advisory-type-heading">संदेश सलाह</div>
+            <div class="advisory-type-content">{{messageAdvisorySection}}</div>
+        </div>
+        <div class="advisory-type-block {{weatherWarningImpactSectionClass}}">
+            <div class="advisory-type-heading">मौसम चेतावनी का कृषि पर संभावित प्रभाव</div>
+            <div class="advisory-type-content">{{weatherWarningImpactSection}}</div>
+        </div>
+        <div class="advisory-type-block {{agrometAdvisorySectionClass}}">
+            <div class="advisory-type-heading">कृषि मौसम सलाह</div>
+            <div class="advisory-type-content">{{agrometAdvisorySection}}</div>
+        </div>
+    </div>
+
+    <div class="section-title crop-title">फसलवार कृषि सलाह</div>
+    <table class="advisory-table">
+        <thead>
+            <tr>
+                <th>फसल का नाम</th>
+                <th>फसल की अवस्था</th>
+                <th>कृषि गतिविधियां</th>
+                <th>मौसम आधारित सलाह</th>
+            </tr>
+        </thead>
+        <tbody>{{advisoryRows}}</tbody>
+    </table>
+
+    <div class="advisory-note">
+        टिप्पणी: किसान भाई ध्यान रखें कि रासायनिक दवाओं एवं कीटनाशकों का छिड़काव तभी करें जब कम से कम 4 घंटे तक वर्षा की संभावना न हो।
+    </div>
+
+    <div class="category-section">
+        <div class="category-block {{fruitVegetableSectionClass}}">
+            <div class="category-heading">फल एवं सब्जियां :</div>
+            <div class="category-content">{{fruitVegetableSection}}</div>
+        </div>
+        <div class="category-block {{animalHusbandryPoultrySectionClass}}">
+            <div class="category-heading">पशुपालन :</div>
+            <div class="category-content">{{animalHusbandryPoultrySection}}</div>
+        </div>
+    </div>
+
+    <div class="app-box">
+        <div>➢ किसानों से अनुरोध है कि मौसम पूर्वानुमान एवं कृषि मौसम सलाह प्राप्त करने के लिए Mausam CG ऐप पर पंजीकरण करें।</div>
+        <div><strong>लिंक-</strong> <a href="https://play.google.com/store/apps/details?id=digital.svara.mausamcg.twa">https://play.google.com/store/apps/details?id=digital.svara.mausamcg.twa</a></div>
+    </div>
+
+    <div class="nodal-officer">नोडल अधिकारी<br><strong>जीकेएमएस</strong></div>
+</div>
+</body>
+</html>
