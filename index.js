@@ -107,7 +107,7 @@ async function startServer() {
         conn.release();
 
         initWS(server);
-        // initMQTT();
+        initMQTT();
         startDeviceSnapshotWorker();
 
         server.listen(PORT, () => {
