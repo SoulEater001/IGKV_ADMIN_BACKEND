@@ -6,11 +6,11 @@ import {
   updateHeartbeat,
   updateDeviceGps,
 } from "../services/db.service.js";
-import { clearNotification } from "../controllers/notification.service.js";
-import {
-  handleDeviceStatus,
-  handleLowBattery,
-} from "../controllers/notification-handler.service.js";
+// import { clearNotification } from "../controllers/notification.service.js";
+// import {
+//   handleDeviceStatus,
+//   handleLowBattery,
+// } from "../controllers/notification-handler.service.js";
 import { updateDeviceCache, updateDeviceLastSeen } from "../services/device-cache.service.js";
 
 const MQTT_URL =
@@ -115,7 +115,7 @@ export function initMQTT() {
           const status = data.toString().toUpperCase();
 
           await updateDeviceStatus(deviceId, status).catch(console.log);
-          await handleDeviceStatus(deviceId, status);
+          // await handleDeviceStatus(deviceId, status);
 
           console.log(`📱 ${deviceId} status: ${status}`);
           break;
@@ -129,7 +129,7 @@ export function initMQTT() {
 
             await updateDeviceStatus(deviceId, "ONLINE");
           }
-          await clearNotification(deviceId, "offline");
+          // await clearNotification(deviceId, "offline");
           console.log(`💓 ${deviceId} heartbeat received`);
           break;
 
@@ -172,7 +172,7 @@ export function initMQTT() {
               : data;
 
           if (typeof batteryPercent === "number") {
-            await handleLowBattery(deviceId, batteryPercent);
+            // await handleLowBattery(deviceId, batteryPercent);
           }
           break;
         }
@@ -202,10 +202,10 @@ export function initMQTT() {
             }
 
             if (typeof data.batteryPercentage === "number") {
-              await handleLowBattery(
-                deviceId,
-                data.batteryPercentage
-              );
+              // await handleLowBattery(
+              //   deviceId,
+              //   data.batteryPercentage
+              // );
             }
 
             if (data.signalStrength !== undefined) {
