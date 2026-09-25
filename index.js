@@ -41,7 +41,7 @@ import iotUserRoutes from './routes/iot-user.routes.js'
 import filterRoutes from './routes/filters.routes.js'
 import chartRoutes from './routes/chart.routes.js'
 import deviceRoutes from './routes/device.routes.js'
-import weatherPdfRoutes from './modules/pdf/routes/weather-pdf.routes.ts'
+import weatherPdfRoutes from './modules/pdf/routes/weather-pdf.routes.js'
 
 const PORT = process.env.PORT;
 const app = express();

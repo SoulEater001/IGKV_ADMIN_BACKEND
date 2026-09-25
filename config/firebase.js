@@ -1,8 +1,10 @@
-// import { initializeApp, cert } from "firebase-admin/app";
-// import serviceAccount from "./farmeyeplus-firebase-adminsdk-fbsvc-04bb3ab7e6.json" with { type: "json" };
+import "dotenv/config";
+import { initializeApp, cert } from "firebase-admin/app";
 
-// const admin = initializeApp({
-//   credential: cert(serviceAccount),
-// });
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
-// export default admin;
+const admin = initializeApp({
+  credential: cert(serviceAccount),
+});
+
+export default admin;
