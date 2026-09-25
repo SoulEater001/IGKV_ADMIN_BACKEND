@@ -1,12 +1,9 @@
 // import { pool } from "../../../config/db.js";
 import { pool } from "#config/db";
-import type { WeatherPdfStationContext } from "../types/weather-pdf.types.ts";
-
 export class WeatherPdfRepository {
 
-  async getStation(stationId: number): Promise<WeatherPdfStationContext | null> {
-    const [rows] = await pool.query(
-      `
+  async getStation(stationId) {
+    const [rows] = await pool.query(`
       SELECT
         id,
         station_name,
@@ -18,45 +15,33 @@ export class WeatherPdfRepository {
       WHERE id = ?
         AND is_active = 1
       LIMIT 1
-      `,
-      [stationId]
-    );
+      `, [stationId]);
 
-    const stations = rows as WeatherPdfStationContext[];
+    const stations = rows;
 
     return stations[0] ?? null;
   }
 
-  async getObservationIssueDates(
-    stationId: number,
-    year: number | null,
-    month: number | null
-  ) {
-
+  async getObservationIssueDates(stationId, year, month) {
     const conditions = [
       'o.station_id = ?'
     ];
 
-    const params: any[] = [
+    const params = [
       stationId
     ];
 
     if (year != null) {
-      conditions.push(
-        'YEAR(o.observation_issue_date) = ?'
-      );
+      conditions.push('YEAR(o.observation_issue_date) = ?');
       params.push(year);
     }
 
     if (month != null) {
-      conditions.push(
-        'MONTH(o.observation_issue_date) = ?'
-      );
+      conditions.push('MONTH(o.observation_issue_date) = ?');
       params.push(month);
     }
 
-    const [rows] = await pool.query(
-      `
+    const [rows] = await pool.query(`
     SELECT
      DATE_FORMAT(o.observation_issue_date, '%Y-%m-%d') AS issue_date,
 DATE_FORMAT(MIN(o.observation_date), '%Y-%m-%d') AS from_date,
@@ -65,11 +50,8 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
     WHERE ${conditions.join(' AND ')}
     GROUP BY o.observation_issue_date
     ORDER BY o.observation_issue_date DESC
-    `,
-      params
-    );
-
-    return (rows as any[]).map(row => ({
+    `, params);
+    return rows.map(row => ({
       issueDate: row.issue_date,
       fromDate: row.from_date,
       endDate: row.end_date,
@@ -79,36 +61,26 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
     }));
   }
 
-  async getForecastIssueDates(
-    stationId: number,
-    year: number | null,
-    month: number | null
-  ) {
-
+  async getForecastIssueDates(stationId, year, month) {
     const conditions = [
       'f.station_id = ?'
     ];
 
-    const params: any[] = [
+    const params = [
       stationId
     ];
 
     if (year != null) {
-      conditions.push(
-        'YEAR(f.forecast_issue_date) = ?'
-      );
+      conditions.push('YEAR(f.forecast_issue_date) = ?');
       params.push(year);
     }
 
     if (month != null) {
-      conditions.push(
-        'MONTH(f.forecast_issue_date) = ?'
-      );
+      conditions.push('MONTH(f.forecast_issue_date) = ?');
       params.push(month);
     }
 
-    const [rows] = await pool.query(
-      `
+    const [rows] = await pool.query(`
     SELECT
       DATE_FORMAT(f.forecast_issue_date, '%Y-%m-%d') AS issue_date,
       f.state_lg_code,
@@ -128,11 +100,9 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
       f.state_lg_code,
       f.district_lg_code,
       f.block_lg_code
-    `,
-      params
-    );
+    `, params);
 
-    return (rows as any[]).map(row => ({
+    return rows.map(row => ({
       issueDate: row.issue_date,
       fromDate: row.from_date,
       endDate: row.end_date,
@@ -142,35 +112,27 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
     }));
   }
 
-  async getWeatherAdvisoryIssueDates(
-    stationId: number,
-    year: number | null,
-    month: number | null
-  ) {
+
+  async getWeatherAdvisoryIssueDates(stationId, year, month) {
     const conditions = [
       'wf.station_id = ?'
     ];
 
-    const params: any[] = [
+    const params = [
       stationId
     ];
 
     if (year != null) {
-      conditions.push(
-        'YEAR(wf.forecast_issue_date) = ?'
-      );
+      conditions.push('YEAR(wf.forecast_issue_date) = ?');
       params.push(year);
     }
 
     if (month != null) {
-      conditions.push(
-        'MONTH(wf.forecast_issue_date) = ?'
-      );
+      conditions.push('MONTH(wf.forecast_issue_date) = ?');
       params.push(month);
     }
 
-    const [rows] = await pool.query(
-      `
+    const [rows] = await pool.query(`
     SELECT
       DATE_FORMAT(
         f.forecast_issue_date,
@@ -287,45 +249,25 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
       f.state_lg_code,
       f.district_lg_code,
       f.block_lg_code
-    `,
-      [
-        ...params,
-        stationId
-      ]
-    );
+    `, [
+      ...params,
+      stationId
+    ]);
 
-    return (rows as any[]).map(row => ({
+    return rows.map(row => ({
       issueDate: row.issue_date,
-
-      observationFromDate:
-        row.observation_from_date,
-
-      observationEndDate:
-        row.observation_end_date,
-
-      forecastFromDate:
-        row.forecast_from_date,
-
-      forecastEndDate:
-        row.forecast_end_date,
-
-      stateLgCode:
-        row.state_lg_code,
-
-      districtLgCode:
-        row.district_lg_code,
-
-      blockLgCode:
-        row.block_lg_code
+      observationFromDate: row.observation_from_date,
+      observationEndDate: row.observation_end_date,
+      forecastFromDate: row.forecast_from_date,
+      forecastEndDate: row.forecast_end_date,
+      stateLgCode: row.state_lg_code,
+      districtLgCode: row.district_lg_code,
+      blockLgCode: row.block_lg_code
     }));
   }
 
-  async getObservations(
-    stationId: number,
-    issueDate: string,
-    fromDate?: string,
-    toDate?: string
-  ) {
+
+  async getObservations(stationId, issueDate, fromDate, toDate) {
     let query = `
     SELECT
       observation_date,
@@ -344,7 +286,7 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
       AND observation_issue_date = ?
   `;
 
-    const params: any[] = [
+    const params = [
       stationId,
       issueDate
     ];
@@ -353,81 +295,46 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
       query += `
       AND observation_date BETWEEN ? AND ?
     `;
-
-      params.push(
-        fromDate,
-        toDate
-      );
+      params.push(fromDate, toDate);
     }
 
-    query += `
-    ORDER BY observation_date ASC
-  `;
+    query += `ORDER BY observation_date ASC`;
 
-    const [rows] =
-      await pool.query(
-        query,
-        params
-      );
+    const [rows] = await pool.query(query, params);
 
-    return rows as any[];
+    return rows;
   }
 
-  async getForecasts(
-    stationId: number,
-    issueDate: string,
-    stateLgCode: number,
-    fromDate?: string,
-    toDate?: string,
-    districtLgCode?: number | null,
-    blockLgCode?: number | null
-  ) {
 
+  async getForecasts(stationId, issueDate, stateLgCode, fromDate, toDate, districtLgCode, blockLgCode) {
     const conditions = [
       'f.station_id = ?',
       'f.forecast_issue_date = ?',
       'f.state_lg_code = ?'
     ];
 
-    const params: any[] = [
+    const params = [
       stationId,
       issueDate,
       stateLgCode
     ];
 
     if (districtLgCode != null) {
-      conditions.push(
-        'f.district_lg_code = ?'
-      );
-
-      params.push(
-        districtLgCode
-      );
+      conditions.push('f.district_lg_code = ?');
+      params.push(districtLgCode);
     }
 
     if (blockLgCode != null) {
-      conditions.push(
-        'f.block_lg_code = ?'
-      );
-
-      params.push(
-        blockLgCode
-      );
+      conditions.push('f.block_lg_code = ?');
+      params.push(blockLgCode);
     }
 
     if (fromDate && toDate) {
-      conditions.push(
-        'f.forecast_date BETWEEN ? AND ?'
-      );
-
-      params.push(
-        fromDate,
-        toDate
-      );
+      conditions.push('f.forecast_date BETWEEN ? AND ?');
+      params.push(fromDate, toDate);
     }
 
-    const [rows] = await pool.query(
-      `
+    const [rows] = await pool.query(`
     SELECT
       f.forecast_date,
       f.rainfall,
@@ -441,20 +348,13 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
     FROM weather_forecast f
     WHERE ${conditions.join(' AND ')}
     ORDER BY f.forecast_date ASC
-    `,
-      params
-    );
-
-    return rows as any[];
+    `, params);
+    return rows;
   }
 
-  async getLocationNames(
-    stateLgCode: number,
-    districtLgCode: number | null,
-    blockLgCode: number | null
-  ) {
-    const [rows] = await pool.query(
-      `
+
+  async getLocationNames(stateLgCode, districtLgCode, blockLgCode) {
+    const [rows] = await pool.query(`
     SELECT
       s.state_lg_code,
 
@@ -522,18 +422,13 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
         districtLgCode,
         blockLgCode,
         stateLgCode
-      ]
-    );
-
-    return (rows as any[])[0] ?? null;
+      ]);
+    return rows[0] ?? null;
   }
 
-  async getAdvisoryObservations(
-    stationId: number,
-    issueDate: string
-  ) {
-    const [rows] = await pool.query(
-      `
+
+  async getAdvisoryObservations(stationId, issueDate) {
+    const [rows] = await pool.query(`
     SELECT
       observation_date,
       max_temperature,
@@ -554,18 +449,14 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
       [
         stationId,
         issueDate
-      ]
-    );
+      ]);
 
-    return rows as any[];
+    return rows;
   }
 
-  async getObservationSummary(
-    stationId: number,
-    issueDate: string
-  ) {
-    const [rows] = await pool.query(
-      `
+
+  async getObservationSummary(stationId, issueDate) {
+    const [rows] = await pool.query(`
     SELECT
       summary_en,
       summary_hi
@@ -573,23 +464,17 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
     WHERE station_id = ?
       AND observation_issue_date = ?
     LIMIT 1
-    `,
-      [
-        stationId,
-        issueDate
-      ]
-    );
+    `, [
+      stationId,
+      issueDate
+    ]);
 
-    return (rows as any[])[0] ?? null;
+    return rows[0] ?? null;
   }
-  async getForecastSummary(
-    issueDate: string,
-    stateLgCode: number,
-    districtLgCode: number | null = null,
-    blockLgCode: number | null = null
-  ) {
-    const [rows] = await pool.query(
-      `
+
+
+  async getForecastSummary(issueDate, stateLgCode, districtLgCode = null, blockLgCode = null) {
+    const [rows] = await pool.query(`
     SELECT
       summary_en,
       summary_hi
@@ -620,41 +505,30 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
         districtLgCode,
         blockLgCode,
         blockLgCode
-      ]
-    );
+      ]);
 
-    return (rows as any[])[0] ?? null;
+    return rows[0] ?? null;
   }
 
-  async getAdvisories(
-    issueDate: string,
-    stateLgCode: number,
-    districtLgCode: number | null = null,
-    blockLgCode: number | null = null,
-    languageId: number
-  ) {
-    const categoryColumn =
-      languageId === 1
-        ? 'c.imd_category_name_h'
-        : 'c.img_category_name';
 
-    const cropColumn =
-      languageId === 1
-        ? 'cr.imd_crop_name_h'
-        : 'cr.imd_crop_name';
+  async getAdvisories(issueDate, stateLgCode, districtLgCode = null, blockLgCode = null, languageId) {
+    const categoryColumn = languageId === 1
+      ? 'c.imd_category_name_h'
+      : 'c.img_category_name';
 
-    const cropStageColumn =
-      languageId === 1
-        ? 'cs.stage_name_h'
-        : 'cs.stage_name';
+    const cropColumn = languageId === 1
+      ? 'cr.imd_crop_name_h'
+      : 'cr.imd_crop_name';
 
-    const advisoryTypeColumn =
-      languageId === 1
-        ? 'at.imd_advisory_type_name_h'
-        : 'at.imd_advisory_type_name';
+    const cropStageColumn = languageId === 1
+      ? 'cs.stage_name_h'
+      : 'cs.stage_name';
 
-    const [rows] = await pool.query(
-      `
+    const advisoryTypeColumn = languageId === 1
+      ? 'at.imd_advisory_type_name_h'
+      : 'at.imd_advisory_type_name';
+
+    const [rows] = await pool.query(`
     SELECT
       m.id AS advisory_main_id,
       m.advisory_main_id AS external_advisory_main_id,
@@ -735,9 +609,8 @@ DATE_FORMAT(MAX(o.observation_date), '%Y-%m-%d') AS end_date
         districtLgCode,
         blockLgCode,
         blockLgCode
-      ]
-    );
+      ]);
     // console.log('Rows : ', rows)
-    return rows as any[];
+    return rows;
   }
 }
